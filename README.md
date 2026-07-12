@@ -1,4 +1,4 @@
-# HeatSense – AI-Based Urban Heat Island Analysis, Prediction and Health Alert System
+# HeatSense – AI-Based Urban Heat Island and Health Alert System
 
 HeatSense is an advanced, modular full-stack application designed to analyze, predict, and issue public health alerts for Urban Heat Island (UHI) effects in Karnataka, India.
 
