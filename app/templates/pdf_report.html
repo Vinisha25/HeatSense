@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HeatSense Summary Report - {{ district.name }}</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: #fff;
+            color: #333;
+            font-size: 14px;
+            padding: 20px;
+        }
+        .report-header {
+            border-bottom: 3px solid #ff4e50;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .report-title {
+            color: #1e293b;
+            font-weight: 800;
+        }
+        .section-title {
+            color: #1e293b;
+            border-left: 5px solid #ff4e50;
+            padding-left: 10px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+        .card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: none;
+        }
+        .table th {
+            background-color: #f8fafc !important;
+            color: #475569;
+        }
+        @media print {
+            .no-print {
+                display: none;
+            }
+            body {
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Print Navigation Helper -->
+    <div class="container no-print mb-4 p-3 bg-light border rounded d-flex justify-content-between align-items-center">
+        <div>
+            <strong>📄 HeatSense Report Printer:</strong> Press the print button to save this analysis page directly as a PDF.
+        </div>
+        <button onclick="window.print();" class="btn btn-primary btn-sm">
+            Print / Save to PDF
+        </button>
+    </div>
+
+    <!-- Print Layout Content -->
+    <div class="container">
+        <header class="report-header d-flex justify-content-between align-items-end">
+            <div>
+                <h1 class="report-title mb-1">🔥 HeatSense Assessment Report</h1>
+                <p class="text-muted mb-0">UHI Spatial Analysis, Prediction, and Public Health Risk Advisory</p>
+            </div>
+            <div class="text-end">
+                <span class="badge bg-secondary p-2 mb-1">Karnataka, India</span>
+                <div class="small text-muted">{{ date_now }}</div>
+            </div>
+        </header>
+
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="card p-3">
+                    <h5 class="fw-bold mb-2">District Profile</h5>
+                    <table class="table table-sm table-striped mb-0">
+                        <tr><td><strong>District Name:</strong></td><td>{{ district.name }}</td></tr>
+                        <tr><td><strong>Latitude:</strong></td><td>{{ district.latitude }}</td></tr>
+                        <tr><td><strong>Longitude:</strong></td><td>{{ district.longitude }}</td></tr>
+                    </table>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card p-3">
+                    <h5 class="fw-bold mb-2">Composite Heat Indices</h5>
+                    <table class="table table-sm table-striped mb-0">
+                        <tr><td><strong>Current CHI Score:</strong></td><td class="fw-bold text-warning">{{ "%.3f"|format(current_chi) }}</td></tr>
+                        <tr><td><strong>Current Risk Level:</strong></td><td class="fw-bold text-danger">{{ current_risk }}</td></tr>
+                        <tr><td><strong>Health Risk Index (HHRI):</strong></td><td class="fw-bold text-primary">{{ "%.3f"|format(hhri.hhri) }}</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="section-title">1. Environmental Band Metrics</h3>
+        <table class="table table-bordered align-middle">
+            <thead>
+                <tr>
+                    <th>Variable</th>
+                    <th>Extracted Baseline Value</th>
+                    <th>Interpretation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Land Surface Temp (LST)</td>
+                    <td>{{ "%.1f"|format(features.lst) }} °C</td>
+                    <td>Satellite thermal emission band</td>
+                </tr>
+                <tr>
+                    <td>Vegetation Index (NDVI)</td>
+                    <td>{{ "%.3f"|format(features.ndvi) }}</td>
+                    <td>Green canopy cover density</td>
+                </tr>
+                <tr>
+                    <td>Built-up Index (NDBI)</td>
+                    <td>{{ "%.3f"|format(features.ndbi) }}</td>
+                    <td>Impervious building density ratio</td>
+                </tr>
+                <tr>
+                    <td>Air Temp (2m)</td>
+                    <td>{{ "%.1f"|format(features.air_temp) }} °C</td>
+                    <td>Ambient air temperature</td>
+                </tr>
+                <tr>
+                    <td>Relative Humidity</td>
+                    <td>{{ "%.1f"|format(features.relative_humidity) }}%</td>
+                    <td>Moisture stress index</td>
+                </tr>
+                <tr>
+                    <td>Wind Speed</td>
+                    <td>{{ "%.1f"|format(features.wind_speed) }} m/s</td>
+                    <td>Convective heat dispersing velocity</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3 class="section-title">2. Climate Warming Projection Scenario (+1.5°C Global warming)</h3>
+        <div class="card p-3 bg-light">
+            <div class="row text-center">
+                <div class="col-6">
+                    <div class="small text-muted">Baseline CHI</div>
+                    <h4 class="fw-bold text-dark">{{ "%.3f"|format(current_chi) }}</h4>
+                </div>
+                <div class="col-6">
+                    <div class="small text-danger">Projected Year 2035 CHI</div>
+                    <h4 class="fw-bold text-danger">{{ "%.3f"|format(future_chi) }}</h4>
+                </div>
+            </div>
+            <p class="small text-muted mt-2 mb-0">Under a warming climate scenario with reduced green cover, the district is projected to shift to a <strong>{{ future_risk }}</strong> risk tier.</p>
+        </div>
+
+        <h3 class="section-title">3. Public Health Advisories & Precautionary Guidelines</h3>
+        <div class="card p-3">
+            <h6 class="fw-bold text-danger mb-2">Age-wise Guidelines:</h6>
+            <div class="row g-2 small">
+                <div class="col-md-4">
+                    <div class="p-2 border rounded h-100">
+                        <strong>👶 Infants & Children</strong>
+                        <p class="mb-0 text-muted mt-1" style="font-size:0.75rem;">Limit sun exposure, dress in light cotton layer cloths, and ensure oral hydration breaks.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-2 border rounded h-100">
+                        <strong>👨‍💼 Working Adults</strong>
+                        <p class="mb-0 text-muted mt-1" style="font-size:0.75rem;">Avoid heavy labor outdoor work during peak hours (12 PM - 3 PM). rest in shade.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-2 border rounded h-100">
+                        <strong>👵 Elderly & Vulnerable</strong>
+                        <p class="mb-0 text-muted mt-1" style="font-size:0.75rem;">Keep rooms ventilated. Monitor vital indicators. ASHA health worker checkups.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="mt-5 pt-3 border-top text-center text-muted small">
+            Generated automatically by HeatSense Analysis Platform. Study Area: Karnataka, India.
+        </footer>
+    </div>
+
+    <!-- Auto Print Trigger JS -->
+    <script>
+        window.addEventListener('load', function() {
+            // Auto launch printer dialogue on load if not previewing
+            setTimeout(function() {
+                window.print();
+            }, 500);
+        });
+    </script>
+</body>
+</html>
