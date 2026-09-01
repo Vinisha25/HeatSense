@@ -1,23 +1,26 @@
 {% extends 'base.html' %}
 
-{% block title %}Dashboard - HeatSense UHI Analysis{% endblock %}
+{% block title %}Dashboard — HeatSense | {{ location_name }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid px-0">
     <div class="dashboard-wrapper">
-        
+
         <!-- ── LEFT SIDEBAR NAVIGATION ── -->
         <aside class="sidebar">
-            <div class="d-flex align-items-center gap-2 mb-4 px-2">
-                <span class="fs-4">🛡️</span>
-                <span class="fw-bold fs-5">HeatSense Menu</span>
+            <div class="d-flex align-items-center gap-2 mb-3 px-2">
+                <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="HeatSense Logo" style="width:34px;height:34px;border-radius:8px;background:white;padding:2px;border:1px solid rgba(249,115,22,0.4);flex-shrink:0;">
+                <div style="overflow:hidden;">
+                    <div class="fw-bold text-gradient text-truncate" style="font-size:0.88rem;" id="sidebar-location-name">{{ location_name }}</div>
+                    <div style="font-size:0.68rem;color:var(--text-muted);" id="sidebar-location-coords">{{ "%.4f"|format(location_lat) }}, {{ "%.4f"|format(location_lon) }}</div>
+                </div>
             </div>
             <nav class="nav flex-column" id="dashboard-nav">
                 <a class="nav-link active" href="#" data-page="home">
                     <i class="fa-solid fa-house"></i> Home Dashboard
                 </a>
                 <a class="nav-link" href="#" data-page="heat-analysis">
-                    <i class="fa-solid fa-map"></i> Urban Heat Analysis
+                    <i class="fa-solid fa-map"></i> Heat Analysis Map
                 </a>
                 <a class="nav-link" href="#" data-page="trends">
                     <i class="fa-solid fa-chart-line"></i> Trend Analysis
@@ -32,597 +35,435 @@
                     <i class="fa-solid fa-seedling"></i> Mitigation Simulation
                 </a>
                 <a class="nav-link" href="#" data-page="before-after">
-                    <i class="fa-solid fa-scale-balanced"></i> Before vs After Comparison
+                    <i class="fa-solid fa-scale-balanced"></i> Before vs After
                 </a>
                 <a class="nav-link" href="#" data-page="health-risk">
-                    <i class="fa-solid fa-heart-pulse"></i> Health Risk Assessment
+                    <i class="fa-solid fa-heart-pulse"></i> Health Risk
                 </a>
-                <a class="nav-link" href="#" data-page="alerts-guidelines">
-                    <i class="fa-solid fa-bell"></i> Alerts & Guidelines
+                <a class="nav-link" href="#" data-page="alerts-precautions">
+                    <i class="fa-solid fa-bell"></i> Alerts & Precautions
+                </a>
+                <a class="nav-link" href="#" data-page="reports">
+                    <i class="fa-solid fa-file-lines"></i> Reports
                 </a>
             </nav>
         </aside>
 
         <!-- ── MAIN CONTENT AREA ── -->
-        <div class="main-content">
-            
-            <!-- ── TOP FILTER & GLOBAL CONTROL BAR ── -->
-            <div class="filter-bar shadow-sm">
-                <div class="row g-3 align-items-center">
-                    <!-- District selection -->
-                    <div class="col-md-3">
-                        <label for="global-district-select" class="form-label fw-semibold small text-muted mb-1">Select District (Karnataka)</label>
-                        <select id="global-district-select" class="form-select bg-dark text-white border-secondary">
-                            {% for d in districts %}
-                            <option value="{{ d.id }}" {% if d.name == 'Bengaluru Urban' %}selected{% endif %}>{{ d.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <!-- Date Picker range -->
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold small text-muted mb-1">Date Period</label>
-                        <div class="d-flex gap-2">
-                            <input type="date" id="start-date" class="form-control form-control-sm bg-dark text-white border-secondary" value="2026-03-01">
-                            <input type="date" id="end-date" class="form-control form-control-sm bg-dark text-white border-secondary" value="2026-05-31">
-                        </div>
-                    </div>
-                    <!-- Search Input -->
-                    <div class="col-md-3">
-                        <label for="search-district" class="form-label fw-semibold small text-muted mb-1">Quick Search</label>
-                        <div class="input-group input-group-sm">
-                            <span class="input-group-text bg-dark border-secondary text-white-50"><i class="fa-solid fa-magnifying-glass"></i></span>
-                            <input type="text" id="search-district" class="form-control bg-dark text-white border-secondary" placeholder="Type district name...">
-                        </div>
-                    </div>
-                    <!-- Download Options -->
-                    <div class="col-md-2 text-md-end mt-4 d-flex gap-2">
-                        <button type="button" id="btn-download-report" class="btn btn-outline-light btn-sm w-50" title="Download Markdown Report">
-                            <i class="fa-solid fa-file-lines"></i> Report
-                        </button>
-                        <button type="button" id="btn-download-pdf" class="btn btn-outline-light btn-sm w-50" title="Save page as PDF">
-                            <i class="fa-solid fa-file-pdf text-danger"></i> PDF
-                        </button>
-                    </div>
+        <div class="main-content" id="main-content">
 
-                </div>
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 1: HOME DASHBOARD                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-home" class="dashboard-page active">
+    <!-- Alert banner -->
+    <div class="alert-toast d-none" id="dashboard-alert">
+        <span class="fs-3">⚠️</span>
+        <div>
+            <h6 class="fw-bold text-danger mb-0" style="font-size:0.88rem;">Active Heat Warning</h6>
+            <small class="text-muted" id="dashboard-alert-text"></small>
+        </div>
+    </div>
+
+    <!-- Stats ribbon -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">Location</div>
+                <div class="stat-value text-gradient" id="home-stat-name" style="font-size:1.1rem;">{{ location_name }}</div>
+                <div class="stat-sub">{{ "%.4f"|format(location_lat) }}°N, {{ "%.4f"|format(location_lon) }}°E</div>
             </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">Composite Heat Index</div>
+                <div class="stat-value" style="color:var(--orange);" id="home-stat-chi">—</div>
+                <div class="stat-sub">Score [0 – 1]</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">Surface Temperature</div>
+                <div class="stat-value" style="color:var(--red);" id="home-stat-lst">—</div>
+                <div class="stat-sub">Land Surface Temp (LST)</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">Risk Level</div>
+                <div class="stat-value" id="home-stat-risk">—</div>
+                <div class="stat-sub" id="home-stat-advisory">Loading...</div>
+            </div>
+        </div>
+    </div>
 
-            <!-- ── DYNAMIC PAGES CONTAINER ── -->
+    <!-- Environmental factor cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3"><div class="stat-card"><div class="stat-label">🌬️ Air Temperature</div><div class="stat-value" id="home-air-temp">—</div></div></div>
+        <div class="col-6 col-lg-3"><div class="stat-card"><div class="stat-label">💧 Humidity</div><div class="stat-value" id="home-humidity">—</div></div></div>
+        <div class="col-6 col-lg-3"><div class="stat-card"><div class="stat-label">🌿 NDVI (Vegetation)</div><div class="stat-value" style="color:var(--green);" id="home-ndvi">—</div></div></div>
+        <div class="col-6 col-lg-3"><div class="stat-card"><div class="stat-label">🏙️ NDBI (Built-up)</div><div class="stat-value" id="home-ndbi">—</div></div></div>
+    </div>
 
-            <!-- 1. Home Dashboard Page -->
-            <div id="page-home" class="dashboard-page active">
-                <!-- Heat alert banner at top if available -->
-                <div class="alert-toast mb-4 d-none" id="dashboard-global-alert">
-                    <span class="fs-3">⚠️</span>
-                    <div>
-                        <h6 class="fw-bold text-danger mb-0">Active Heat Warning Event</h6>
-                        <small class="text-white-50" id="global-alert-text">Kalaburagi and surrounding districts are currently operating under Very High thermal stress levels.</small>
-                    </div>
+    <!-- Map + Quick Info -->
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card border-0 mb-4">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="fa-solid fa-map me-2" style="color:var(--orange);"></i>Spatial Overview</h6>
+                    <span class="gee-badge offline" id="map-gee-badge"><span class="dot"></span> <span id="map-gee-text">Basemap</span></span>
                 </div>
-
-                <!-- Stats summary panel -->
-                <div class="row g-4 mb-4">
-                    <div class="col-md-3">
-                        <div class="card p-3 shadow-sm border-0">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="text-muted small">Target District</span>
-                                <span class="badge bg-primary">Active</span>
-                            </div>
-                            <h3 class="fw-bold mb-0" id="home-stat-name">Bengaluru</h3>
-                            <span class="small text-muted">Coordinates: Lat/Lon bands</span>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card p-3 shadow-sm border-0">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="text-muted small">Composite Heat Index (CHI)</span>
-                                <span class="fs-4 text-warning">🔥</span>
-                            </div>
-                            <h3 class="fw-bold mb-0 text-warning" id="home-stat-chi">--</h3>
-                            <span class="small text-muted">Thermal stress score [0 - 1]</span>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card p-3 shadow-sm border-0">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="text-muted small">Historical Delta</span>
-                                <span class="fs-4 text-danger">📈</span>
-                            </div>
-                            <h3 class="fw-bold mb-0 text-danger" id="home-stat-slope">+2.3°C</h3>
-                            <span class="small text-muted">Epoch temperature delta</span>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card p-3 shadow-sm border-0">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="text-muted small">Risk Level</span>
-                                <span class="fs-4 text-success">🛡️</span>
-                            </div>
-                            <h3 class="fw-bold mb-0" id="home-stat-risk">--</h3>
-                            <span class="small text-muted" id="home-stat-advisory">--</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Main Overview panel row -->
-                <div class="row g-4">
-                    <div class="col-lg-8">
-                        <div class="card border-0 shadow-sm mb-4">
-                            <div class="card-header py-3 bg-dark">
-                                <h5 class="card-title text-white mb-0">UHI Spatial Overview</h5>
-                            </div>
-                            <div class="card-body p-0">
-                                <div class="map-frame-container" style="height:420px;">
-                                    <iframe id="home-map-iframe" src="/api/map-layers" style="width: 100%; height: 100%; border: none;"></iframe>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- District Quick Specs -->
-                    <div class="col-lg-4">
-                        <div class="card border-0 shadow-sm mb-4 h-100">
-                            <div class="card-header py-3 bg-dark">
-                                <h5 class="card-title text-white mb-0">Karnataka Study Area Overview</h5>
-                            </div>
-                            <div class="card-body">
-                                <p class="small text-muted">Karnataka lies in the southern tropical zone of India. Urban development and vegetation loss has accelerated local warming events across principal metropolitan areas.</p>
-                                <hr class="border-secondary">
-                                <h6 class="fw-bold text-gradient mb-2">Active Controls Available:</h6>
-                                <ul class="list-unstyled small text-white-50">
-                                    <li class="mb-2"><i class="fa-solid fa-circle text-primary me-2"></i><strong>Urban Heat:</strong> Check layers on the maps.</li>
-                                    <li class="mb-2"><i class="fa-solid fa-circle text-warning me-2"></i><strong>Predictive Models:</strong> RF regressor scenarios.</li>
-                                    <li class="mb-2"><i class="fa-solid fa-circle text-success me-2"></i><strong>Mitigation:</strong> Simulate green parks.</li>
-                                    <li><i class="fa-solid fa-circle text-danger me-2"></i><strong>Alerts:</strong> Health precaution guidelines.</li>
-                                </ul>
-                            </div>
-                        </div>
+                <div class="card-body p-0">
+                    <div class="map-frame-container" style="height:400px;">
+                        <iframe id="home-map-iframe" src="/api/map-layers?lat={{ location_lat }}&lon={{ location_lon }}&radius={{ location_radius }}"></iframe>
                     </div>
                 </div>
             </div>
-
-            <!-- 2. Urban Heat Analysis Page -->
-            <div id="page-heat-analysis" class="dashboard-page">
-                <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header py-3 d-flex justify-content-between align-items-center bg-dark">
-                        <h5 class="card-title text-white mb-0">📍 Interactive GIS Map Viewer</h5>
-                        <button type="button" id="btn-update-map" class="btn btn-primary btn-sm">
-                            <i class="fa-solid fa-sync"></i> Refresh GEE Imagery
-                        </button>
-                    </div>
-                    <div class="card-body p-0 position-relative">
-                        <div class="map-frame-container">
-                            <iframe id="main-map-iframe" src="/api/map-layers" style="width: 100%; height: 100%; border: none;"></iframe>
-                            
-                            <!-- Dynamic Layer Controller overlay -->
-                            <div class="map-layer-controller">
-                                <h6 class="fw-bold mb-2">Toggle GEE Layers</h6>
-                                <div class="form-check mb-1">
-                                    <input class="form-check-input" type="checkbox" id="layer-lst" checked>
-                                    <label class="form-check-label" for="layer-lst">Land Surface Temp (LST)</label>
-                                </div>
-                                <div class="form-check mb-1">
-                                    <input class="form-check-input" type="checkbox" id="layer-ndvi">
-                                    <label class="form-check-label" for="layer-ndvi">Vegetation Index (NDVI)</label>
-                                </div>
-                                <div class="form-check mb-1">
-                                    <input class="form-check-input" type="checkbox" id="layer-ndbi">
-                                    <label class="form-check-label" for="layer-ndbi">Built-up Index (NDBI)</label>
-                                </div>
-                                <div class="form-check mb-1">
-                                    <input class="form-check-input" type="checkbox" id="layer-lulc">
-                                    <label class="form-check-label" for="layer-lulc">Land Use Cover (LULC)</label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="layer-air">
-                                    <label class="form-check-label" for="layer-air">Air Temperature (2m)</label>
-                                </div>
-                            </div>
-
-                            <!-- Interactive Map Legend box -->
-                            <div class="map-legend">
-                                <h6 class="fw-bold mb-2" id="legend-title">LST Legend (°C)</h6>
-                                <div id="legend-items">
-                                    <div class="legend-item"><span class="legend-color" style="background:#0000ff;"></span> &lt; 20°C (Cool)</div>
-                                    <div class="legend-item"><span class="legend-color" style="background:#00ffff;"></span> 20°C - 30°C</div>
-                                    <div class="legend-item"><span class="legend-color" style="background:#ffff00;"></span> 30°C - 40°C</div>
-                                    <div class="legend-item"><span class="legend-color" style="background:#ff7f00;"></span> 40°C - 45°C</div>
-                                    <div class="legend-item"><span class="legend-color" style="background:#ff0000;"></span> &gt; 45°C (Extreme)</div>
-                                </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card border-0 h-100">
+                <div class="card-header py-2"><h6 class="mb-0">📊 Quick Summary</h6></div>
+                <div class="card-body">
+                    <div class="mb-3" id="home-wind-lulc">
+                        <div class="factor-card mb-2">
+                            <span class="factor-icon">💨</span>
+                            <div class="flex-grow-1">
+                                <div class="factor-label">Wind Speed</div>
+                                <div class="factor-value" id="home-wind">— m/s</div>
                             </div>
                         </div>
+                        <div class="factor-card mb-2">
+                            <span class="factor-icon">🗺️</span>
+                            <div class="flex-grow-1">
+                                <div class="factor-label">LULC Heat Score</div>
+                                <div class="factor-value" id="home-lulc">—</div>
+                            </div>
+                        </div>
+                        <div class="factor-card mb-2">
+                            <span class="factor-icon">🔮</span>
+                            <div class="flex-grow-1">
+                                <div class="factor-label">Future CHI (+1.5°C)</div>
+                                <div class="factor-value" style="color:var(--red);" id="home-future-chi">—</div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr style="border-color:var(--border-card);">
+                    <div class="text-center">
+                        <small class="text-muted" id="home-data-source">Data source: loading...</small>
                     </div>
                 </div>
             </div>
-
-            <!-- 3. Trend Analysis Page -->
-            <div id="page-trends" class="dashboard-page">
-                <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header py-3 bg-dark">
-                        <h5 class="card-title text-white mb-0">📈 Historical Decadal Warming Trends (2015-2025)</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="analysis-trend-chart" style="height: 420px; width: 100%;"></div>
-                        <div class="row mt-4 g-3">
-                            <div class="col-md-6">
-                                <div class="p-3 rounded bg-dark border">
-                                    <h6 class="fw-bold text-gradient mb-2">Linear Regression Details:</h6>
-                                    <p class="small text-muted mb-0">Decadal trend slope calculated via Landsat 8 composites. Bengaluru displays an average warming rate of <strong>+0.21°C/year</strong>, indicating a persistent warming slope.</p>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="p-3 rounded bg-dark border">
-                                    <h6 class="fw-bold text-gradient mb-2">Epoch Differencing:</h6>
-                                    <p class="small text-muted mb-0">Average temperature difference between epoch periods (Recent 2022-2025 composite minus baseline 2015-2018 composite) demonstrates positive thermal anomalies across principal urban cores.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 4. Heat Prediction Page -->
-            <div id="page-prediction" class="dashboard-page">
-                <div class="row g-4">
-                    <!-- Predictions side card -->
-                    <div class="col-lg-6">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-header py-3 bg-dark d-flex justify-content-between align-items-center">
-                                <h5 class="card-title text-white mb-0">🤖 Machine Learning Prediction</h5>
-                                <span class="badge bg-success">Trained</span>
-                            </div>
-                            <div class="card-body">
-                                <h6 class="fw-semibold text-muted text-uppercase mb-3">Current Day Predicts</h6>
-                                <div class="p-3 bg-dark rounded border mb-4">
-                                    <div class="row text-center g-2">
-                                        <div class="col-4">
-                                            <div class="small text-muted">Surface Temp</div>
-                                            <h4 class="fw-bold text-danger my-1" id="pred-page-lst">-- °C</h4>
-                                        </div>
-                                        <div class="col-4">
-                                            <div class="small text-muted">Composite Index</div>
-                                            <h4 class="fw-bold text-warning my-1" id="pred-page-chi">--</h4>
-                                        </div>
-                                        <div class="col-4">
-                                            <div class="small text-muted">Risk Tier</div>
-                                            <h4 class="fw-bold my-1" id="pred-page-risk">--</h4>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <h6 class="fw-semibold text-danger text-uppercase mb-3">🔮 Year 2035 Climate Warming Projection</h6>
-                                <div class="p-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded mb-3">
-                                    <div class="row text-center g-2">
-                                        <div class="col-6">
-                                            <div class="small text-danger">Projected Future CHI</div>
-                                            <h3 class="fw-bold text-danger my-1" id="pred-page-future-chi">--</h3>
-                                        </div>
-                                        <div class="col-6">
-                                            <div class="small text-danger">Projected Risk Level</div>
-                                            <h3 class="fw-bold text-danger my-1" id="pred-page-future-risk">--</h3>
-                                        </div>
-                                    </div>
-                                </div>
-                                <p class="small text-muted mt-2 mb-0" id="pred-page-advisory"></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Model specifications -->
-                    <div class="col-lg-6">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-header py-3 bg-dark">
-                                <h5 class="card-title text-white mb-0">Random Forest Model Accuracy</h5>
-                            </div>
-                            <div class="card-body">
-                                <p class="small text-muted">The Random Forest Regressor is trained on pixel matrices sampled across Karnataka covering urban, rural, forest, and agricultural classes.</p>
-                                <table class="table table-sm table-borderless small mt-3">
-                                    <tr>
-                                        <td><strong>Mean Absolute Error (MAE):</strong></td>
-                                        <td class="text-success text-end">0.0108</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Root Mean Squared Error (RMSE):</strong></td>
-                                        <td class="text-success text-end">0.0163</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>R² Score (Coefficient of Determination):</strong></td>
-                                        <td class="text-success text-end">0.9856</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Number of Trees (n_estimators):</strong></td>
-                                        <td class="text-end">100</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Max Tree Depth (max_depth):</strong></td>
-                                        <td class="text-end">12</td>
-                                    </tr>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 5. Factor Analysis Page -->
-            <div id="page-factor-analysis" class="dashboard-page">
-                <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header py-3 bg-dark">
-                        <h5 class="card-title text-white mb-0">📊 Environmental Factor Contribution (Module 5)</h5>
-                    </div>
-                    <div class="card-body p-0">
-                        <div id="analysis-factor-ribbon" class="d-flex flex-wrap gap-2 p-3 border-bottom bg-light bg-opacity-5"></div>
-                        <div class="row g-0">
-                            <div class="col-md-6 border-end border-secondary">
-                                <div class="p-3">
-                                    <div id="analysis-factor-bar-chart" style="height:360px; width:100%;"></div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="p-3">
-                                    <div id="analysis-factor-pie-chart" style="height:360px; width:100%;"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 6. Mitigation Simulation Page -->
-            <div id="page-mitigation" class="dashboard-page">
-                <div class="row g-4">
-                    <div class="col-md-4">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-header py-3 bg-dark text-white">
-                                <h5 class="card-title mb-0">Strategy Simulator</h5>
-                            </div>
-                            <div class="card-body">
-                                <p class="small text-muted mb-4">Select a target cooling strategy, simulate, and check post-mitigation predictions.</p>
-                                <div class="mb-3">
-                                    <label for="strategy-select" class="form-label fw-semibold small text-muted">Mitigation Strategy</label>
-                                    <select id="strategy-select" class="form-select bg-dark text-white border-secondary">
-                                        <option value="vegetation_expansion">🌿 Vegetation Expansion (+18% Green Space)</option>
-                                        <option value="green_roofs">🏗️ Green Roof Retrofits</option>
-                                        <option value="reduce_buildup">🏙️ Reduce Built-Up Density</option>
-                                        <option value="increase_parks">🌳 Urban Park Expansion</option>
-                                    </select>
-                                </div>
-                                <button type="button" id="btn-run-strategy" class="btn btn-success w-100 py-2">
-                                    ▶ Run Mitigation
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Stat Ribbon Output -->
-                    <div class="col-md-8">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-header py-3 bg-dark text-white">
-                                <h5 class="card-title mb-0">Cooling Impact Summary</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row g-3 text-center">
-                                    <div class="col-6 col-md-3">
-                                        <div class="p-3 rounded bg-dark border">
-                                            <div class="text-muted small">Before CHI</div>
-                                            <h3 class="fw-bold text-danger my-1" id="mit-before">--</h3>
-                                        </div>
-                                    </div>
-                                    <div class="col-6 col-md-3">
-                                        <div class="p-3 rounded bg-dark border">
-                                            <div class="text-muted small">After CHI</div>
-                                            <h3 class="fw-bold text-success my-1" id="mit-after">--</h3>
-                                        </div>
-                                    </div>
-                                    <div class="col-6 col-md-3">
-                                        <div class="p-3 rounded bg-dark border">
-                                            <div class="text-muted small">LST Reduced</div>
-                                            <h3 class="fw-bold text-warning my-1" id="mit-temp">-- °C</h3>
-                                        </div>
-                                    </div>
-                                    <div class="col-6 col-md-3">
-                                        <div class="p-3 rounded bg-dark border">
-                                            <div class="text-muted small">Improvement</div>
-                                            <h3 class="fw-bold text-primary my-1" id="mit-pct-val">--%</h3>
-                                        </div>
-                                    </div>
-                                </div>
-                                <p class="small text-muted mt-4" id="mit-desc-text"></p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 7. Before vs After Comparison Page -->
-            <div id="page-before-after" class="dashboard-page">
-                <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header py-3 bg-dark">
-                        <h5 class="card-title text-white mb-0">⚖️ Side-by-Side Mitigation Comparison</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-4">
-                            <!-- Comparison Plotly indicators -->
-                            <div class="col-lg-6">
-                                <div id="comp-indicator-chart" style="height:300px;"></div>
-                            </div>
-                            <div class="col-lg-6">
-                                <div id="comp-chi-chart" style="height:300px;"></div>
-                            </div>
-                            <div class="col-lg-6">
-                                <div id="comp-lst-chart" style="height:230px;"></div>
-                            </div>
-                            <div class="col-lg-6">
-                                <div id="comp-delta-chart" style="height:300px;"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 8. Health Risk Assessment Page -->
-            <div id="page-health-risk" class="dashboard-page">
-                <div class="row g-4">
-                    <!-- Calculator panel -->
-                    <div class="col-lg-5">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-header py-3 bg-dark text-white">
-                                <h5 class="card-title mb-0">🏥 Interactive HHRI Calculator</h5>
-                            </div>
-                            <div class="card-body">
-                                <p class="small text-muted mb-4">Adjust factors to compute the Heat Health Risk Index (HHRI) [1 to 5] and risk recommendations in real-time.</p>
-                                
-                                <div class="mb-4">
-                                    <label class="form-label d-flex justify-content-between small">
-                                        <span>Air Temperature (°C)</span>
-                                        <span class="fw-bold" id="slider-temp-val">32°C</span>
-                                    </label>
-                                    <input type="range" class="form-range" id="slider-temp" min="15" max="50" value="32">
-                                </div>
-                                <div class="mb-4">
-                                    <label class="form-label d-flex justify-content-between small">
-                                        <span>Relative Humidity (%)</span>
-                                        <span class="fw-bold" id="slider-rh-val">50%</span>
-                                    </label>
-                                    <input type="range" class="form-range" id="slider-rh" min="10" max="100" value="50">
-                                </div>
-                                <div class="mb-4">
-                                    <label class="form-label d-flex justify-content-between small">
-                                        <span>Vulnerability (ASHA Index / Demographic)</span>
-                                        <span class="fw-bold" id="slider-vuln-val">0.50</span>
-                                    </label>
-                                    <input type="range" class="form-range" id="slider-vuln" min="0" max="1" step="0.05" value="0.5">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Risk gauge output -->
-                    <div class="col-lg-7">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-header py-3 bg-dark text-white">
-                                <h5 class="card-title mb-0">Assessment Result</h5>
-                            </div>
-                            <div class="card-body text-center d-flex flex-column align-items-center justify-content-center">
-                                <div class="display-1 mb-2" id="calc-risk-icon">🟢</div>
-                                <h2 class="fw-bold" id="calc-risk-level">Low Risk</h2>
-                                <h5 class="text-muted mb-3">HHRI Score: <span id="calc-risk-score">0.24</span></h5>
-                                <div class="p-3 bg-dark rounded border text-muted small max-width-100" id="calc-risk-advisory" style="max-width:450px;">
-                                    Conditions are normal. Avoid prolonged exposure.
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 9. Alerts & Precautionary Guidelines Page -->
-            <div id="page-alerts-guidelines" class="dashboard-page">
-                
-                <!-- Age-Wise Guidelines Panel -->
-                <div class="row g-4 mb-4">
-                    <div class="col-md-4">
-                        <div class="age-card child">
-                            <div class="d-flex align-items-center gap-2 mb-3">
-                                <span class="fs-4">👶</span>
-                                <h5 class="fw-bold mb-0">Infants & Children</h5>
-                            </div>
-                            <ul class="small text-white-50 ps-3">
-                                <li class="mb-2">Never leave infants or children in parked vehicles (fatal within minutes).</li>
-                                <li class="mb-2">Ensure regular fluid breaks (oral hydration solutions / fresh juices).</li>
-                                <li>Dress in loose, light-colored cotton layers. Limit outdoor play.</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="age-card adult">
-                            <div class="d-flex align-items-center gap-2 mb-3">
-                                <span class="fs-4">👨‍💼</span>
-                                <h5 class="fw-bold mb-0">Adults & Workers</h5>
-                            </div>
-                            <ul class="small text-white-50 ps-3">
-                                <li class="mb-2">Avoid outdoor strenuous work between 12 PM - 3 PM.</li>
-                                <li class="mb-2">Consume at least 4 liters of water daily. Rest in shaded cool shelters.</li>
-                                <li>Recognize heat illness symptoms: heavy sweating, headache, vomiting.</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="age-card elderly">
-                            <div class="d-flex align-items-center gap-2 mb-3">
-                                <span class="fs-4">👵</span>
-                                <h5 class="fw-bold mb-0">Elderly & Vulnerable</h5>
-                            </div>
-                            <ul class="small text-white-50 ps-3">
-                                <li class="mb-2">Ensure active cross-ventilation in home living quarters.</li>
-                                <li class="mb-2">Monitor blood pressure and continue cardiovascular medications.</li>
-                                <li>Arrange daily health check-ins from ASHA community workers.</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Emergency log alerts list -->
-                <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header bg-danger text-white py-3">
-                        <h5 class="card-title mb-0">⚠️ Active Heat Alert Log warnings (SQLite)</h5>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0" id="alerts-table">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th class="ps-3">Date</th>
-                                        <th>District</th>
-                                        <th>Risk Severity</th>
-                                        <th>Health Advisory</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="alerts-table-body">
-                                    <!-- Seeded dynamically via API call -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- emergency support number contacts -->
-                <div class="card border-0 shadow-sm bg-dark border-secondary">
-                    <div class="card-body">
-                        <h6 class="fw-bold mb-2 text-white">🚨 State Disaster Emergency Numbers</h6>
-                        <div class="row text-center text-white-50 g-3">
-                            <div class="col-6 col-md-3">
-                                <div class="small">Ambulance</div>
-                                <h4 class="fw-bold text-gradient">108</h4>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="small">Health Assistance</div>
-                                <h4 class="fw-bold text-gradient">104</h4>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="small">State Control</div>
-                                <h4 class="fw-bold text-gradient">1070</h4>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="small">BBMP Helpline</div>
-                                <h4 class="fw-bold text-gradient">080-22221188</h4>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ── Dynamic charts loading spinner ── -->
-            <div id="chart-loader" class="d-none position-fixed top-50 start-50 translate-middle text-center p-3 rounded" style="background: rgba(0,0,0,0.8); z-index:99999;">
-                <div class="spinner-border text-primary" role="status"></div>
-                <div class="small text-white-50 mt-1">Recalculating models...</div>
-            </div>
-
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block extra_js %}
-<!-- Plotly JS Library -->
-<script src="https://cdn.plot.ly/plotly-2.20.0.min.js"></script>
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 2: HEAT ANALYSIS MAP                                              -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-heat-analysis" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">🗺️</span><h4>Multi-Factor Heat Analysis Map</h4></div>
+    <div class="card border-0">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">Interactive GIS Map — {{ location_name }}</h6>
+            <button class="btn btn-primary btn-sm" id="btn-refresh-map" onclick="refreshMap()">
+                <i class="fa-solid fa-sync me-1"></i> Refresh
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="map-frame-container" style="height:550px;">
+                <iframe id="main-map-iframe" src="/api/map-layers?lat={{ location_lat }}&lon={{ location_lon }}&radius={{ location_radius }}"></iframe>
+            </div>
+        </div>
+    </div>
+    <div class="row g-3 mt-3">
+        <div class="col-md-4"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">Layers Available</h6><small class="text-muted">LST, NDVI, NDBI, LULC, Air Temp, Humidity, Wind Speed, CHI, Hotspots (toggle in GEE map layer control)</small></div></div>
+        <div class="col-md-4"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">CHI Classification</h6><small class="text-muted">Low (< 0.35) • Moderate (0.35–0.55) • High (0.55–0.75) • Very High (≥ 0.75)</small></div></div>
+        <div class="col-md-4"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">Data Sources</h6><small class="text-muted">Landsat 8 C2 L2 + ERA5-Land Daily + ESA WorldCover v200</small></div></div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 3: TREND ANALYSIS                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-trends" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">📈</span><h4>Historical Heat Trend Analysis</h4></div>
+    <div class="card border-0 mb-4">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">Temperature & CHI Trends — {{ location_name }}</h6>
+            <div class="d-flex gap-2 align-items-center">
+                <select class="form-select form-select-sm" id="trend-start-year" style="width:auto;" onchange="loadTrends()">
+                    {% for y in range(2013, 2026) %}<option value="{{ y }}" {{ 'selected' if y == 2015 }}>{{ y }}</option>{% endfor %}
+                </select>
+                <span class="text-muted">to</span>
+                <select class="form-select form-select-sm" id="trend-end-year" style="width:auto;" onchange="loadTrends()">
+                    {% for y in range(2015, 2027) %}<option value="{{ y }}" {{ 'selected' if y == 2025 }}>{{ y }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="trend-chart" style="height:420px;width:100%;">
+                <div class="loading-overlay"><div class="hs-spinner"></div><span>Loading trend analysis...</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-6"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">📊 Warming Slope</h6><p class="small text-muted mb-0" id="trend-slope-info">Historical warming slope will be calculated from Landsat 8 summer composites (March–May) across the selected year range.</p></div></div>
+        <div class="col-md-6"><div class="card p-3 border-0"><h6 class="text-gradient fw-bold">🔮 Projection</h6><p class="small text-muted mb-0">Dashed lines and shaded bands indicate projected values based on linear regression of historical data. These are model projections, not observations.</p></div></div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 4: HEAT PREDICTION                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-prediction" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">🤖</span><h4>ML-Based Heat Prediction</h4></div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card border-0 h-100">
+                <div class="card-header py-2"><h6 class="mb-0">Prediction Timeline</h6></div>
+                <div class="card-body">
+                    <div id="prediction-chart" style="height:400px;width:100%;">
+                        <div class="loading-overlay"><div class="hs-spinner"></div><span>Generating predictions...</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card border-0 mb-3">
+                <div class="card-header py-2"><h6 class="mb-0">Current Prediction</h6></div>
+                <div class="card-body">
+                    <div class="row g-2 text-center">
+                        <div class="col-4"><div class="stat-label">LST</div><div class="stat-value" style="color:var(--red);font-size:1.2rem;" id="pred-lst">—</div></div>
+                        <div class="col-4"><div class="stat-label">CHI</div><div class="stat-value" style="color:var(--orange);font-size:1.2rem;" id="pred-chi">—</div></div>
+                        <div class="col-4"><div class="stat-label">Risk</div><div class="stat-value" style="font-size:1.2rem;" id="pred-risk">—</div></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card border-0">
+                <div class="card-header py-2" style="border-left:3px solid var(--red);"><h6 class="mb-0">🔮 Future Scenario (+1.5°C)</h6></div>
+                <div class="card-body">
+                    <div class="row g-2 text-center">
+                        <div class="col-6"><div class="stat-label">Projected CHI</div><div class="stat-value" style="color:var(--red);font-size:1.3rem;" id="pred-future-chi">—</div></div>
+                        <div class="col-6"><div class="stat-label">Projected Risk</div><div class="stat-value" style="font-size:1.3rem;" id="pred-future-risk">—</div></div>
+                    </div>
+                    <div class="mt-3 p-2 rounded" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);">
+                        <small class="text-muted" id="pred-advisory">Loading advisory...</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 5: FACTOR ANALYSIS                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-factor-analysis" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">🎯</span><h4>Factor Analysis — {{ location_name }}</h4></div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card border-0">
+                <div class="card-header py-2"><h6 class="mb-0">Radar / Spider Chart — Heat Contribution Factors</h6></div>
+                <div class="card-body" style="background:rgba(255,255,255,0.97);border-radius:0 0 var(--radius-lg) var(--radius-lg);">
+                    <div id="radar-chart" style="height:480px;width:100%;">
+                        <div class="loading-overlay"><div class="hs-spinner"></div><span style="color:#333;">Loading factor analysis...</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card border-0 mb-3">
+                <div class="card-header py-2"><h6 class="mb-0">Factor Scores (0–100 Heat Contribution)</h6></div>
+                <div class="card-body" id="factor-scores-container">
+                    <div class="loading-overlay"><div class="hs-spinner"></div></div>
+                </div>
+            </div>
+            <div class="card border-0">
+                <div class="card-header py-2"><h6 class="mb-0">Key Findings</h6></div>
+                <div class="card-body">
+                    <p class="small text-muted" id="factor-findings">Analyzing major contributing factors...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- ML Feature Importance Charts -->
+    <div class="row g-4 mt-3">
+        <div class="col-lg-6"><div class="card border-0"><div class="card-header py-2"><h6 class="mb-0">RF Feature Importance</h6></div><div class="card-body"><div id="factor-bar-chart" style="height:360px;"></div></div></div></div>
+        <div class="col-lg-6"><div class="card border-0"><div class="card-header py-2"><h6 class="mb-0">Contribution Breakdown</h6></div><div class="card-body"><div id="factor-pie-chart" style="height:360px;"></div></div></div></div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 6: MITIGATION SIMULATION                                           -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-mitigation" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">🌿</span><h4>Mitigation Strategy Simulation</h4></div>
+    <p class="text-muted mb-3" style="font-size:0.85rem;">Select a cooling strategy to simulate its effect on heat conditions at <strong class="text-gradient">{{ location_name }}</strong>.</p>
+
+    <!-- Strategy selection cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="strategy-card selected" data-strategy="vegetation_expansion" onclick="selectStrategy(this)"><div class="strategy-icon">🌿</div><div class="strategy-name">Vegetation Expansion</div><div class="strategy-desc">Street trees, urban forests, roadside greenery</div></div></div>
+        <div class="col-md-3"><div class="strategy-card" data-strategy="green_roofs" onclick="selectStrategy(this)"><div class="strategy-icon">🏗️</div><div class="strategy-name">Green Roof Retrofit</div><div class="strategy-desc">Vegetated rooftop gardens on buildings</div></div></div>
+        <div class="col-md-3"><div class="strategy-card" data-strategy="reduce_buildup" onclick="selectStrategy(this)"><div class="strategy-icon">🏙️</div><div class="strategy-name">Reduce Built-Up</div><div class="strategy-desc">Permeable pavements, open spaces</div></div></div>
+        <div class="col-md-3"><div class="strategy-card" data-strategy="increase_parks" onclick="selectStrategy(this)"><div class="strategy-icon">🌳</div><div class="strategy-name">Urban Parks</div><div class="strategy-desc">Green corridors and cool islands</div></div></div>
+    </div>
+
+    <button class="btn btn-primary mb-4" id="btn-run-mitigation" onclick="runMitigation()">
+        <i class="fa-solid fa-play me-1"></i> Run Simulation
+    </button>
+
+    <!-- Results -->
+    <div id="mitigation-results" class="d-none">
+        <div class="row g-3 mb-4">
+            <div class="col-md-3"><div class="stat-card"><div class="stat-label">Before CHI</div><div class="stat-value" style="color:var(--red);" id="mit-before-chi">—</div></div></div>
+            <div class="col-md-3"><div class="stat-card"><div class="stat-label">After CHI</div><div class="stat-value" style="color:var(--green);" id="mit-after-chi">—</div></div></div>
+            <div class="col-md-3"><div class="stat-card"><div class="stat-label">LST Reduction</div><div class="stat-value" style="color:var(--blue);" id="mit-lst-reduction">—</div></div></div>
+            <div class="col-md-3"><div class="stat-card"><div class="stat-label">Improvement</div><div class="stat-value text-gradient" id="mit-pct">—</div></div></div>
+        </div>
+        <div class="row g-4">
+            <div class="col-lg-6"><div class="card border-0"><div class="card-body"><div id="mit-chi-chart" style="height:300px;"></div></div></div></div>
+            <div class="col-lg-6"><div class="card border-0"><div class="card-body"><div id="mit-gauge-chart" style="height:300px;"></div></div></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 7: BEFORE VS AFTER                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-before-after" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">⚖️</span><h4>Before & After Comparison</h4></div>
+    <p class="text-muted mb-3" style="font-size:0.85rem;">Compare the original heat conditions with simulated post-mitigation conditions using the interactive slider.</p>
+
+    <div class="mb-3 d-flex gap-2 align-items-center">
+        <span class="text-muted" style="font-size:0.82rem;">Strategy:</span>
+        <select class="form-select form-select-sm" id="ba-strategy" style="width:auto;" onchange="loadBeforeAfter()">
+            <option value="vegetation_expansion" selected>🌿 Vegetation Expansion</option>
+            <option value="green_roofs">🏗️ Green Roof Retrofit</option>
+            <option value="reduce_buildup">🏙️ Reduce Built-Up</option>
+            <option value="increase_parks">🌳 Urban Parks</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadBeforeAfter()"><i class="fa-solid fa-play me-1"></i> Compare</button>
+    </div>
+
+    <!-- Swipe comparison container -->
+    <div class="ba-container" style="height:450px;" id="ba-wrapper">
+        <div class="ba-label before">🔴 BEFORE</div>
+        <div class="ba-label after">🟢 AFTER</div>
+        <div class="ba-before" id="ba-before"><iframe id="ba-before-iframe"></iframe></div>
+        <div class="ba-after" id="ba-after"><iframe id="ba-after-iframe"></iframe></div>
+        <div class="ba-slider" id="ba-slider"></div>
+        <div class="loading-overlay" id="ba-loading" style="position:absolute;inset:0;z-index:20;background:rgba(10,10,10,0.9);">
+            <div class="hs-spinner"></div><span>Click "Compare" to load Before & After visualization</span>
+        </div>
+    </div>
+
+    <!-- Delta stats below -->
+    <div class="row g-3 mt-3" id="ba-stats" style="display:none;">
+        <div class="col-md-3"><div class="stat-card"><div class="stat-label">CHI Reduction</div><div class="stat-value text-gradient" id="ba-chi-delta">—</div></div></div>
+        <div class="col-md-3"><div class="stat-card"><div class="stat-label">LST Cooling</div><div class="stat-value" style="color:var(--blue);" id="ba-lst-delta">—</div></div></div>
+        <div class="col-md-3"><div class="stat-card"><div class="stat-label">Risk Before</div><div class="stat-value" id="ba-risk-before">—</div></div></div>
+        <div class="col-md-3"><div class="stat-card"><div class="stat-label">Risk After</div><div class="stat-value" style="color:var(--green);" id="ba-risk-after">—</div></div></div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 8: HEALTH RISK                                                     -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-health-risk" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">🏥</span><h4>Health Risk Assessment</h4></div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="stat-card" style="text-align:center;">
+                <div class="stat-label">Heat Health Risk Index (HHRI)</div>
+                <div class="stat-value" style="font-size:2rem;" id="hr-hhri">—</div>
+                <div id="hr-risk-badge" class="mt-2"></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card" style="text-align:center;">
+                <div class="stat-label">Composite Heat Index</div>
+                <div class="stat-value" style="font-size:2rem;color:var(--orange);" id="hr-chi">—</div>
+                <div class="stat-sub">CHI from RF model</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-label">Advisory</div>
+                <p class="small text-muted mt-2" id="hr-advisory">Loading health advisory...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Emergency contacts -->
+    <div class="card border-0 mb-4">
+        <div class="card-header py-2"><h6 class="mb-0">🚨 Emergency Contacts (Karnataka)</h6></div>
+        <div class="card-body">
+            <div class="row g-2" id="hr-contacts">
+                <div class="col-6 col-md-3"><div class="p-2 rounded text-center" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);"><small class="text-muted d-block">Arogya Sahayavani</small><strong style="color:var(--red);">104</strong></div></div>
+                <div class="col-6 col-md-3"><div class="p-2 rounded text-center" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);"><small class="text-muted d-block">Ambulance</small><strong style="color:var(--red);">108</strong></div></div>
+                <div class="col-6 col-md-3"><div class="p-2 rounded text-center" style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);"><small class="text-muted d-block">Police</small><strong style="color:var(--orange);">100</strong></div></div>
+                <div class="col-6 col-md-3"><div class="p-2 rounded text-center" style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);"><small class="text-muted d-block">BBMP Heat Helpline</small><strong style="color:var(--orange);">080-22221188</strong></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 9: AGE-SPECIFIC ALERTS & PRECAUTIONS                               -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-alerts-precautions" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">🔔</span><h4>Age-Specific Precautions & Alerts</h4></div>
+
+    <div class="row g-3 mb-4" id="age-cards-container">
+        <div class="loading-overlay"><div class="hs-spinner"></div><span>Loading precautions...</span></div>
+    </div>
+
+    <!-- Active system alerts -->
+    <div class="card border-0 mt-4">
+        <div class="card-header py-2"><h6 class="mb-0">📋 System Alerts</h6></div>
+        <div class="card-body" id="system-alerts-container">
+            <div class="loading-overlay"><div class="hs-spinner"></div><span>Loading alerts...</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 10: REPORTS                                                        -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-reports" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">📄</span><h4>Download Reports</h4></div>
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card border-0 p-4 text-center">
+                <div style="font-size:3rem;margin-bottom:1rem;">📝</div>
+                <h5 class="fw-bold">Markdown Report</h5>
+                <p class="text-muted small">Detailed text report with all environmental data, CHI, HHRI, mitigation recommendations, and emergency contacts.</p>
+                <button class="btn btn-primary" onclick="downloadReport('md')"><i class="fa-solid fa-download me-1"></i> Download .md Report</button>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 p-4 text-center">
+                <div style="font-size:3rem;margin-bottom:1rem;">📊</div>
+                <h5 class="fw-bold">PDF Report</h5>
+                <p class="text-muted small">Print-ready HTML report that can be saved as PDF using your browser's print function (Ctrl+P).</p>
+                <button class="btn btn-outline-orange" onclick="downloadReport('pdf')"><i class="fa-solid fa-file-pdf me-1"></i> Open PDF View</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+        </div><!-- /main-content -->
+    </div><!-- /dashboard-wrapper -->
+</div>
+
+<!-- Pass location data to JavaScript -->
+<script>
+    window.HEATSENSE = {
+        lat:    {{ location_lat }},
+        lon:    {{ location_lon }},
+        name:   '{{ location_name | replace("'", "\\'") }}',
+        radius: {{ location_radius }},
+    };
+</script>
 {% endblock %}

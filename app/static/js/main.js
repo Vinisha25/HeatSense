@@ -1,527 +1,622 @@
 /**
- * HeatSense JavaScript Client Controller - Module 8
- * Manages premium navigation, AJAX requests, map controls, interactive legends,
- * search functionality, reports downloading, and dynamic UI rendering.
+ * HeatSense — Main Dashboard JavaScript
+ * Handles page navigation, API data loading, chart rendering,
+ * mitigation simulation, before/after swipe, and age-specific alerts.
  */
 
-function _rankEmoji(rank) {
-    const map = { 1: '🥇', 2: '🥈', 3: '🥉' };
-    return map[rank] || `${rank}.`;
-}
+(function () {
+    'use strict';
 
-document.addEventListener('DOMContentLoaded', function () {
-    console.log("HeatSense Application Dashboard Initialized.");
+    // ── Global State ──────────────────────────────────────────────────────
+    const HS = window.HEATSENSE || { lat: 12.9716, lon: 77.5946, name: 'Bengaluru Urban', radius: 15 };
+    let currentPage = 'home';
+    let selectedStrategy = 'vegetation_expansion';
+    let predictionData = null;
+    let factorData = null;
+    let healthData = null;
 
-    // Core variables
-    let currentCHIValue = 0.50; // Cache for the interactive HHRI calculator
-    
-    // UI Elements
-    const globalDistrictSelect = document.getElementById('global-district-select');
-    const startDateInput = document.getElementById('start-date');
-    const endDateInput = document.getElementById('end-date');
-    const searchDistrictInput = document.getElementById('search-district');
-    const btnDownloadReport = document.getElementById('btn-download-report');
-    
-    // Pages Switching Setup
-    const navLinks = document.querySelectorAll('#dashboard-nav .nav-link');
-    const pages = document.querySelectorAll('.dashboard-page');
-    
-    // Chart Loader
-    const chartLoader = document.getElementById('chart-loader');
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 1. Sidebar Navigation switching with transitions
-    // ────────────────────────────────────────────────────────────────────────
-    navLinks.forEach(link => {
-        link.addEventListener('click', function (e) {
-            e.preventDefault();
-            const targetPage = this.getAttribute('data-page');
-            
-            // Toggle sidebar active class
-            navLinks.forEach(l => l.classList.remove('active'));
-            this.classList.add('active');
-
-            // Show target page panel
-            pages.forEach(p => {
-                p.classList.remove('active');
-                if (p.id === `page-${targetPage}`) {
-                    p.classList.add('active');
-                }
-            });
-
-            // Handle map redraw / Plotly resize on tab display
-            setTimeout(() => {
-                window.dispatchEvent(new Event('resize'));
-            }, 100);
-        });
+    // ── Page Navigation ───────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        initNavigation();
+        // Load home data on startup
+        loadPrediction();
+        loadHealthRisk();
     });
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 2. Global search filter matching district list
-    // ────────────────────────────────────────────────────────────────────────
-    if (searchDistrictInput) {
-        searchDistrictInput.addEventListener('input', function () {
-            const query = this.value.toLowerCase().trim();
-            const options = globalDistrictSelect.options;
-            
-            let matchedIndex = -1;
-            for (let i = 0; i < options.length; i++) {
-                const txt = options[i].text.toLowerCase();
-                if (txt.includes(query)) {
-                    matchedIndex = i;
-                    break;
-                }
-            }
-            
-            if (matchedIndex !== -1) {
-                globalDistrictSelect.selectedIndex = matchedIndex;
-                // Trigger update analysis automatically
-                globalDistrictSelect.dispatchEvent(new Event('change'));
-            }
+    function initNavigation() {
+        const navLinks = document.querySelectorAll('#dashboard-nav .nav-link');
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = link.dataset.page;
+                switchPage(page);
+            });
         });
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 3. Download report option
-    // ────────────────────────────────────────────────────────────────────────
-    if (btnDownloadReport) {
-        btnDownloadReport.addEventListener('click', function () {
-            const districtId = globalDistrictSelect.value;
-            if (!districtId) {
-                alert("Please select a district first.");
-                return;
-            }
-            // Trigger download of markdown/text report
-            window.open(`/api/download-report?district_id=${districtId}`, '_blank');
-        });
-    }
+    function switchPage(page) {
+        // Hide all pages
+        document.querySelectorAll('.dashboard-page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('#dashboard-nav .nav-link').forEach(l => l.classList.remove('active'));
 
-    const btnDownloadPDF = document.getElementById('btn-download-pdf');
-    if (btnDownloadPDF) {
-        btnDownloadPDF.addEventListener('click', function () {
-            const districtId = globalDistrictSelect.value;
-            if (!districtId) {
-                alert("Please select a district first.");
-                return;
-            }
-            // Trigger browser-print print-to-PDF page
-            window.open(`/api/download-pdf?district_id=${districtId}`, '_blank');
-        });
-    }
-
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 4. Central Update Analysis Trigger
-    // ────────────────────────────────────────────────────────────────────────
-    function updateDashboardAnalysis() {
-        const districtId = globalDistrictSelect.value;
-        if (!districtId) return;
-
-        // Show spinner
-        if (chartLoader) chartLoader.classList.remove('d-none');
-
-        const start = startDateInput.value;
-        const end = endDateInput.value;
-
-        // Refresh maps iframes with query strings
-        const homeMap = document.getElementById('home-map-iframe');
-        const mainMap = document.getElementById('main-map-iframe');
-        if (homeMap) homeMap.src = `/api/map-layers?start_date=${start}&end_date=${end}`;
-        if (mainMap) mainMap.src = `/api/map-layers?start_date=${start}&end_date=${end}`;
-
-        // 1. Get predictions
-        fetch(`/api/predict?district_id=${districtId}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.error) return;
-
-                // Home stats
-                _setEl('home-stat-name', data.district);
-                _setEl('home-stat-chi', (data.current_chi || 0).toFixed(3));
-                _setEl('home-stat-risk', data.current_risk_level || data.risk_level);
-                _setEl('home-stat-advisory', data.current_advisory || data.advisory);
-                
-                // Risk color class updates
-                const riskColorMap = {
-                    'Low': '#27ae60', 'Moderate': '#f39c12',
-                    'High': '#e67e22', 'Very High': '#ef4444'
-                };
-                const homeRiskEl = document.getElementById('home-stat-risk');
-                if (homeRiskEl) {
-                    homeRiskEl.style.color = riskColorMap[data.current_risk_level || data.risk_level] || '#fff';
-                }
-
-                currentCHIValue = data.current_chi || 0.50;
-
-                // Prediction page
-                _setEl('pred-page-lst', `${data.predicted_lst_celsius || '--'} °C`);
-                _setEl('pred-page-chi', (data.current_chi || 0).toFixed(3));
-                _setEl('pred-page-risk', data.current_risk_level || data.risk_level);
-                _setEl('pred-page-future-chi', (data.future_chi || 0).toFixed(3));
-                _setEl('pred-page-future-risk', data.future_risk_level || '--');
-                _setEl('pred-page-advisory', data.current_advisory || data.advisory);
-
-                // Risk classes for page items
-                const prEl = document.getElementById('pred-page-risk');
-                if (prEl) prEl.className = `fw-bold my-1 ${data.current_risk_level === 'Very High' ? 'text-danger' : 'text-warning'}`;
-
-                // Pop alert warning toast if high risk
-                const globalAlert = document.getElementById('dashboard-global-alert');
-                const globalAlertText = document.getElementById('global-alert-text');
-                if (globalAlert) {
-                    const r = data.current_risk_level || data.risk_level;
-                    if (r === 'High' || r === 'Very High') {
-                        globalAlert.classList.remove('d-none');
-                        if (globalAlertText) {
-                            globalAlertText.textContent = `${data.district} is operating at ${r} risk levels (${(data.current_chi||0).toFixed(3)} CHI). Advisory: ${data.current_advisory}`;
-                        }
-                    } else {
-                        globalAlert.classList.add('d-none');
-                    }
-                }
-
-                // Update health sliders with current default values
-                const sliderTemp = document.getElementById('slider-temp');
-                if (sliderTemp) {
-                    sliderTemp.value = Math.round(data.predicted_lst_celsius || 32);
-                    document.getElementById('slider-temp-val').textContent = `${sliderTemp.value}°C`;
-                    recalculateHHRI();
-                }
-            });
-
-        // 2. Get history trends
-        const trendDiv = document.getElementById('analysis-trend-chart');
-        fetch(`/api/history?district_id=${districtId}`)
-            .then(res => res.json())
-            .then(graph => {
-                if (trendDiv && graph.data) {
-                    // Update Plotly configuration for glassmorphic transparent background
-                    graph.layout.paper_bgcolor = 'rgba(0,0,0,0)';
-                    graph.layout.plot_bgcolor = 'rgba(0,0,0,0)';
-                    graph.layout.font = { color: '#94a3b8' };
-                    Plotly.newPlot(trendDiv, graph.data, graph.layout, { responsive: true });
-                }
-            });
-
-        // 3. Get Factor Analysis contributions
-        const barDiv = document.getElementById('analysis-factor-bar-chart');
-        const pieDiv = document.getElementById('analysis-factor-pie-chart');
-        const ribbon = document.getElementById('analysis-factor-ribbon');
-
-        fetch('/api/factor-analysis')
-            .then(res => res.json())
-            .then(data => {
-                if (data.error) return;
-
-                // Build factor badges ribbon
-                if (ribbon && data.ranked_factors) {
-                    ribbon.innerHTML = '';
-                    data.ranked_factors.forEach(f => {
-                        const badge = document.createElement('span');
-                        badge.className = 'badge rounded-pill px-3 py-2 d-flex align-items-center gap-1';
-                        badge.style.cssText = `background:${f.colour};color:#fff;font-size:0.8rem;`;
-                        badge.innerHTML = `<span>${_rankEmoji(f.rank)}</span> <strong>#${f.rank}</strong>&nbsp;${f.label} <span style="opacity:0.8;">&nbsp;${f.percentage}%</span>`;
-                        ribbon.appendChild(badge);
-                    });
-                }
-
-                const trans = { paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: { color: '#94a3b8' } };
-                if (barDiv && data.bar_chart_json) {
-                    const spec = JSON.parse(data.bar_chart_json);
-                    Plotly.newPlot(barDiv, spec.data, Object.assign(spec.layout, trans), { responsive: true });
-                }
-                if (pieDiv && data.pie_chart_json) {
-                    const spec = JSON.parse(data.pie_chart_json);
-                    Plotly.newPlot(pieDiv, spec.data, Object.assign(spec.layout, trans), { responsive: true });
-                }
-
-                if (chartLoader) chartLoader.classList.add('d-none');
-            })
-            .catch(() => {
-                if (chartLoader) chartLoader.classList.add('d-none');
-            });
-    }
-
-    // Trigger update on district change
-    if (globalDistrictSelect) {
-        globalDistrictSelect.addEventListener('change', updateDashboardAnalysis);
-    }
-    
-    // GEE Refresh Button
-    const btnUpdateMap = document.getElementById('btn-update-map');
-    if (btnUpdateMap) {
-        btnUpdateMap.addEventListener('click', updateDashboardAnalysis);
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 5. GEE Layer checkboxes & interactive legends
-    // ────────────────────────────────────────────────────────────────────────
-    const layerChecks = {
-        'layer-lst':  'lst',
-        'layer-ndvi': 'ndvi',
-        'layer-ndbi': 'ndbi',
-        'layer-lulc': 'lulc',
-        'layer-air':  'air'
-    };
-
-    const legendTitles = {
-        'lst':  'Land Surface Temp (°C)',
-        'ndvi': 'Vegetation Index (NDVI)',
-        'ndbi': 'Built-Up Index (NDBI)',
-        'lulc': 'ESA Land Use Class Colors',
-        'air':  'Ambient Air Temp (2m - °C)'
-    };
-
-    const legendGradients = {
-        'lst': [
-            { c: '#0000ff', l: '< 20°C (Cool)' },
-            { c: '#00ffff', l: '20°C - 30°C' },
-            { c: '#ffff00', l: '30°C - 40°C' },
-            { c: '#ff7f00', l: '40°C - 45°C' },
-            { c: '#ff0000', l: '> 45°C (Extreme)' }
-        ],
-        'ndvi': [
-            { c: '#ffffff', l: '< 0.0 (Barren)' },
-            { c: '#f7fcb9', l: '0.0 - 0.2 (Sparse)' },
-            { c: '#addd8e', l: '0.2 - 0.4 (Shrub)' },
-            { c: '#31a354', l: '0.4 - 0.6 (Medium)' },
-            { c: '#006837', l: '> 0.6 (Dense Forest)' }
-        ],
-        'ndbi': [
-            { c: '#0000ff', l: '< -0.3 (Non-Urban)' },
-            { c: '#ffffff', l: '-0.3 - 0.0' },
-            { c: '#ff0000', l: '> 0.0 (High Impervious/Concrete)' }
-        ],
-        'lulc': [
-            { c: '#006400', l: 'Trees' },
-            { c: '#ffbb22', l: 'Shrubland' },
-            { c: '#ffff4c', l: 'Grassland' },
-            { c: '#f096ff', l: 'Cropland' },
-            { c: '#fa0000', l: 'Built-up / Urban concrete' },
-            { c: '#0064c8', l: 'Open water / Wetland' }
-        ],
-        'air': [
-            { c: '#1a9850', l: '< 22°C (Comfort)' },
-            { c: '#fee08b', l: '22°C - 32°C' },
-            { c: '#d73027', l: '> 32°C (Warming)' }
-        ]
-    };
-
-    Object.keys(layerChecks).forEach(chkId => {
-        const checkbox = document.getElementById(chkId);
-        if (checkbox) {
-            checkbox.addEventListener('change', function () {
-                if (this.checked) {
-                    // Turn off other checkboxes to focus map layer
-                    Object.keys(layerChecks).forEach(otherId => {
-                        if (otherId !== chkId) {
-                            const oc = document.getElementById(otherId);
-                            if (oc) oc.checked = false;
-                        }
-                    });
-                    
-                    // Update Legend Box details
-                    const key = layerChecks[chkId];
-                    document.getElementById('legend-title').textContent = legendTitles[key];
-                    
-                    const container = document.getElementById('legend-items');
-                    container.innerHTML = '';
-                    legendGradients[key].forEach(item => {
-                        const div = document.createElement('div');
-                        div.className = 'legend-item';
-                        div.innerHTML = `<span class="legend-color" style="background:${item.c};"></span> ${item.l}`;
-                        container.appendChild(div);
-                    });
-                }
-            });
+        // Show target page
+        const target = document.getElementById('page-' + page);
+        if (target) {
+            target.classList.add('active');
+            currentPage = page;
         }
-    });
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 6. Mitigation Strategies Simulations triggers
-    // ────────────────────────────────────────────────────────────────────────
-    const btnRunStrategy = document.getElementById('btn-run-strategy');
-    if (btnRunStrategy) {
-        btnRunStrategy.addEventListener('click', function () {
-            const districtId = globalDistrictSelect.value;
-            const strategyType = document.getElementById('strategy-select').value;
-            
-            btnRunStrategy.textContent = '⏳ Simulating…';
-            btnRunStrategy.disabled = true;
+        // Highlight nav link
+        const navLink = document.querySelector(`#dashboard-nav .nav-link[data-page="${page}"]`);
+        if (navLink) navLink.classList.add('active');
 
-            fetch('/api/mitigation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    district_id: districtId,
-                    scenario_type: strategyType
-                })
-            })
-            .then(res => res.json())
+        // Lazy-load page data on first visit
+        if (page === 'trends') loadTrends();
+        if (page === 'prediction') loadPredictionChart();
+        if (page === 'factor-analysis') loadFactorAnalysis();
+        if (page === 'health-risk') loadHealthRisk();
+        if (page === 'alerts-precautions') loadAlertsPrecautions();
+    }
+
+    // ── API Helper ────────────────────────────────────────────────────────
+    function apiUrl(path) {
+        const sep = path.includes('?') ? '&' : '?';
+        return `${path}${sep}lat=${HS.lat}&lon=${HS.lon}&name=${encodeURIComponent(HS.name)}&radius=${HS.radius}`;
+    }
+
+    function fetchJSON(url) {
+        return fetch(url).then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        });
+    }
+
+    // ── HOME: Load Predictions (populates home stats + prediction page) ──
+    function loadPrediction() {
+        fetchJSON(apiUrl('/api/predict'))
             .then(data => {
-                btnRunStrategy.textContent = '▶ Run Mitigation';
-                btnRunStrategy.disabled = false;
-
-                if (data.error) {
-                    alert('Simulation failed: ' + data.error);
-                    return;
-                }
-
-                // Populate page 6 (Mitigation results) details
-                _setEl('mit-before', (data.before_chi || 0).toFixed(3));
-                _setEl('mit-after', (data.after_chi || 0).toFixed(3));
-                _setEl('mit-temp', `${(data.lst_reduction || 0).toFixed(1)} °C`);
-                _setEl('mit-pct-val', `${(data.pct_improvement || 0).toFixed(1)}%`);
-                _setEl('mit-desc-text', `Intervention Details: ${data.description}. Post-simulation composite index represents an improvement of ${data.pct_improvement}% reduction in local warming stress levels.`);
-
-                // Update page 7 (Before vs After comparison page) Plotly charts
-                const cfg = { responsive: true, displayModeBar: false };
-                const trans = { paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: { color: '#94a3b8' } };
-                
-                _renderPlotly('comp-indicator-chart', data.indicator_json, trans, cfg);
-                _renderPlotly('comp-chi-chart', data.chi_bar_json, trans, cfg);
-                _renderPlotly('comp-lst-chart', data.lst_bar_json, trans, cfg);
-                _renderPlotly('comp-delta-chart', data.delta_bar_json, trans, cfg);
-
-                // Auto switch page view to Before/After for wow factor
-                const beforeAfterLink = document.querySelector('[data-page="before-after"]');
-                if (beforeAfterLink) beforeAfterLink.click();
+                predictionData = data;
+                updateHomeDashboard(data);
+                updatePredictionPage(data);
             })
             .catch(err => {
-                btnRunStrategy.textContent = '▶ Run Mitigation';
-                btnRunStrategy.disabled = false;
-                console.error("Simulation run error:", err);
+                console.error('Prediction load failed:', err);
+                setEl('home-stat-chi', 'Error');
             });
-        });
     }
 
-    function _renderPlotly(divId, jsonStr, layoutOverride, config) {
-        if (!jsonStr) return;
-        const div = document.getElementById(divId);
-        if (!div) return;
-        try {
-            const spec = JSON.parse(jsonStr);
-            Object.assign(spec.layout, layoutOverride);
-            Plotly.newPlot(div, spec.data, spec.layout, config);
-        } catch (e) {
-            console.warn(`Chart drawing failed on #${divId}:`, e);
+    function updateHomeDashboard(data) {
+        setEl('home-stat-chi', data.current_chi.toFixed(3));
+        setEl('home-stat-lst', data.predicted_lst_celsius.toFixed(1) + '°C');
+        setEl('home-stat-risk', data.current_risk_level);
+        setEl('home-stat-advisory', data.current_advisory);
+
+        // Color risk level
+        const riskEl = document.getElementById('home-stat-risk');
+        if (riskEl) riskEl.style.color = riskColor(data.current_risk_level);
+
+        // Environmental factors
+        if (data.features) {
+            setEl('home-air-temp', (data.features.air_temp || 0).toFixed(1) + '°C');
+            setEl('home-humidity', (data.features.relative_humidity || 0).toFixed(1) + '%');
+            setEl('home-ndvi', (data.features.ndvi || 0).toFixed(3));
+            setEl('home-ndbi', (data.features.ndbi || 0).toFixed(3));
+            setEl('home-wind', (data.features.wind_speed || 0).toFixed(1) + ' m/s');
+            setEl('home-lulc', (data.features.lulc_heat || 0).toFixed(3));
+        }
+
+        setEl('home-future-chi', data.future_chi.toFixed(3));
+        setEl('home-data-source', 'Data source: ' + (data.data_source === 'gee' ? '🛰️ Google Earth Engine' : '📊 Climatological Model'));
+
+        // Map GEE badge
+        const mapBadge = document.getElementById('map-gee-badge');
+        const mapText = document.getElementById('map-gee-text');
+        if (mapBadge && mapText) {
+            if (data.data_source === 'gee') {
+                mapBadge.className = 'gee-badge online';
+                mapText.textContent = 'GEE Layers';
+            } else {
+                mapBadge.className = 'gee-badge offline';
+                mapText.textContent = 'Basemap';
+            }
+        }
+
+        // Alert banner for high/very high
+        if (data.current_risk_level === 'High' || data.current_risk_level === 'Very High') {
+            const alertDiv = document.getElementById('dashboard-alert');
+            if (alertDiv) {
+                alertDiv.classList.remove('d-none');
+                setEl('dashboard-alert-text', data.current_advisory);
+            }
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 7. Interactive HHRI calculator logic (sliders)
-    // ────────────────────────────────────────────────────────────────────────
-    const sliderTemp = document.getElementById('slider-temp');
-    const sliderRh = document.getElementById('slider-rh');
-    const sliderVuln = document.getElementById('slider-vuln');
+    function updatePredictionPage(data) {
+        setEl('pred-lst', data.predicted_lst_celsius.toFixed(1) + '°C');
+        setEl('pred-chi', data.current_chi.toFixed(3));
+        setEl('pred-risk', data.current_risk_level);
+        setEl('pred-future-chi', data.future_chi.toFixed(3));
+        setEl('pred-future-risk', data.future_risk_level);
+        setEl('pred-advisory', data.future_advisory);
 
-    function recalculateHHRI() {
-        if (!sliderTemp || !sliderRh || !sliderVuln) return;
-
-        const temp = parseFloat(sliderTemp.value);
-        const rh = parseFloat(sliderRh.value);
-        const vuln = parseFloat(sliderVuln.value);
-
-        // Update slider feedback labels
-        document.getElementById('slider-temp-val').textContent = `${temp}°C`;
-        document.getElementById('slider-rh-val').textContent = `${rh}%`;
-        document.getElementById('slider-vuln-val').textContent = vuln.toFixed(2);
-
-        // Normalized values [0, 1] matching Python health_risk.py formula
-        const air_n = Math.min(1, Math.max(0, (temp - 15.0) / 30.0));
-        const rh_n  = Math.min(1, Math.max(0, (rh - 20.0) / 80.0));
-
-        // HHRI = CHI * 0.40 + air_n * 0.25 + rh_n * 0.20 + vuln * 0.15
-        const computedScore = (currentCHIValue * 0.40) + (air_n * 0.25) + (rh_n * 0.20) + (vuln * 0.15);
-        const scoreVal = Math.min(1.0, Math.max(0.0, computedScore));
-
-        document.getElementById('calc-risk-score').textContent = scoreVal.toFixed(3);
-
-        // Define Risk Tiers
-        let level = 'Low';
-        let icon = '🟢';
-        let adv = 'Conditions are normal. Stay hydrated and avoid prolonged sun exposure during afternoon hours.';
-        let color = '#10b981';
-
-        if (scoreVal >= 0.72) {
-            level = 'Very High Risk';
-            icon = '🔴';
-            adv = 'EXTREME HEAT STRESS. Activate heat action plan. Open cooling centres, issue warning broadcasts, and limit outdoor labor.';
-            color = '#ef4444';
-        } else if (scoreVal >= 0.52) {
-            level = 'High Risk';
-            icon = '🟠';
-            adv = 'High warning advisory. Drink fluids regularly, avoid peak sunlight hours, and deploy community health checkups.';
-            color = '#f97316';
-        } else if (scoreVal >= 0.30) {
-            level = 'Moderate Risk';
-            icon = '🟡';
-            adv = 'Moderate heat index levels. Outdoor workers should take regular breaks and stay hydrated in shaded spots.';
-            color = '#eab308';
-        }
-
-        const levelEl = document.getElementById('calc-risk-level');
-        const iconEl  = document.getElementById('calc-risk-icon');
-        const advEl   = document.getElementById('calc-risk-advisory');
-
-        if (levelEl) {
-            levelEl.textContent = level;
-            levelEl.style.color = color;
-        }
-        if (iconEl) iconEl.textContent = icon;
-        if (advEl) advEl.textContent = adv;
+        const riskEl = document.getElementById('pred-risk');
+        if (riskEl) riskEl.style.color = riskColor(data.current_risk_level);
+        const futRiskEl = document.getElementById('pred-future-risk');
+        if (futRiskEl) futRiskEl.style.color = riskColor(data.future_risk_level);
     }
 
-    if (sliderTemp) sliderTemp.addEventListener('input', recalculateHHRI);
-    if (sliderRh) sliderRh.addEventListener('input', recalculateHHRI);
-    if (sliderVuln) sliderVuln.addEventListener('input', recalculateHHRI);
+    // ── TRENDS ────────────────────────────────────────────────────────────
+    let trendsLoaded = false;
+    window.loadTrends = function () {
+        const startYear = document.getElementById('trend-start-year')?.value || 2015;
+        const endYear = document.getElementById('trend-end-year')?.value || 2025;
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 8. Alerts Warnings log database table populator
-    // ────────────────────────────────────────────────────────────────────────
-    function fetchAndRenderAlerts() {
-        const body = document.getElementById('alerts-table-body');
-        if (!body) return;
+        const chartDiv = document.getElementById('trend-chart');
+        chartDiv.innerHTML = '<div class="loading-overlay"><div class="hs-spinner"></div><span>Loading trend analysis...</span></div>';
 
-        fetch('/api/alerts')
-            .then(res => res.json())
-            .then(alerts => {
-                body.innerHTML = '';
-                if (alerts.length === 0) {
-                    body.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">No active health warnings seeded in SQLite.</td></tr>`;
-                    return;
+        fetchJSON(apiUrl(`/api/history?start_year=${startYear}&end_year=${endYear}`))
+            .then(data => {
+                if (data.chart && data.chart.data) {
+                    Plotly.newPlot('trend-chart', data.chart.data, data.chart.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false,
+                    });
                 }
+                // Update slope info
+                if (data.data && data.data.length > 0) {
+                    const last = data.data[data.data.length - 1];
+                    setEl('trend-slope-info',
+                        `Warming rate: +${last.lst_slope.toFixed(3)}°C/year | ` +
+                        `Latest LST: ${last.mean_lst_celsius.toFixed(1)}°C | ` +
+                        `Latest CHI: ${last.mean_chi.toFixed(3)} | ` +
+                        `Data source: ${last.data_source === 'gee' ? 'Google Earth Engine' : 'Climatological Model'}`);
+                }
+                trendsLoaded = true;
+            })
+            .catch(err => {
+                console.error('Trends failed:', err);
+                chartDiv.innerHTML = '<div class="loading-overlay text-danger">Failed to load trend data.</div>';
+            });
+    };
 
-                alerts.forEach(a => {
-                    let badge = `<span class="badge bg-success">Low</span>`;
-                    if (a.risk_level === 'Very High') {
-                        badge = `<span class="badge bg-danger">🔴 Very High</span>`;
-                    } else if (a.risk_level === 'High') {
-                        badge = `<span class="badge bg-warning text-dark">🟠 High</span>`;
-                    } else if (a.risk_level === 'Moderate') {
-                        badge = `<span class="badge bg-info text-dark">🟡 Moderate</span>`;
+    // ── PREDICTION CHART ──────────────────────────────────────────────────
+    let predChartLoaded = false;
+    function loadPredictionChart() {
+        if (predChartLoaded) return;
+        const chartDiv = document.getElementById('prediction-chart');
+        chartDiv.innerHTML = '<div class="loading-overlay"><div class="hs-spinner"></div><span>Generating predictions...</span></div>';
+
+        fetchJSON(apiUrl('/api/history'))
+            .then(data => {
+                if (data.data) {
+                    // Use visualization module's prediction chart
+                    const historicalData = data.data;
+                    const futureData = predictionData || {};
+
+                    // Build prediction-focused chart client-side
+                    const years = historicalData.map(d => d.year);
+                    const chiVals = historicalData.map(d => d.mean_chi);
+
+                    // Linear regression for projection
+                    const n = years.length;
+                    const sumX = years.reduce((a, b) => a + b, 0);
+                    const sumY = chiVals.reduce((a, b) => a + b, 0);
+                    const sumXY = years.reduce((sum, x, i) => sum + x * chiVals[i], 0);
+                    const sumX2 = years.reduce((sum, x) => sum + x * x, 0);
+                    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+                    const intercept = (sumY - slope * sumX) / n;
+
+                    const lastYear = Math.max(...years);
+                    const projYears = [];
+                    const projChi = [];
+                    for (let y = lastYear + 1; y <= lastYear + 10; y++) {
+                        projYears.push(y);
+                        projChi.push(Math.min(1.0, slope * y + intercept));
                     }
 
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td class="ps-3 small text-muted">${a.alert_date}</td>
-                        <td class="fw-semibold">${a.district_name}</td>
-                        <td>${badge}</td>
-                        <td class="small text-muted" style="max-width:320px;">${a.advisory_message}</td>
-                        <td><span class="badge bg-success-subtle text-success border border-success">Active</span></td>
-                    `;
-                    body.appendChild(row);
-                });
+                    const traces = [
+                        {
+                            x: years, y: chiVals,
+                            mode: 'lines+markers', name: 'Historical CHI',
+                            fill: 'tozeroy', fillcolor: 'rgba(249,115,22,0.1)',
+                            line: { color: '#f97316', width: 3 },
+                            marker: { size: 7 },
+                        },
+                        {
+                            x: [lastYear, ...projYears], y: [chiVals[chiVals.length - 1], ...projChi],
+                            mode: 'lines+markers', name: 'Projected CHI',
+                            fill: 'tozeroy', fillcolor: 'rgba(239,68,68,0.08)',
+                            line: { color: '#ef4444', width: 2, dash: 'dash' },
+                            marker: { size: 5, symbol: 'diamond' },
+                        },
+                    ];
+
+                    const layout = {
+                        title: `Heat Prediction — ${HS.name}`,
+                        xaxis: { title: 'Year', gridcolor: 'rgba(255,255,255,0.05)' },
+                        yaxis: { title: 'CHI', range: [0, 1.1], gridcolor: 'rgba(255,255,255,0.05)' },
+                        paper_bgcolor: 'rgba(0,0,0,0)',
+                        plot_bgcolor: 'rgba(0,0,0,0)',
+                        legend: { orientation: 'h', x: 0, y: -0.15, bgcolor: 'rgba(0,0,0,0)' },
+                        margin: { l: 50, r: 50, t: 50, b: 80 },
+                        shapes: [{
+                            type: 'line', x0: lastYear + 0.5, x1: lastYear + 0.5, y0: 0, y1: 1,
+                            line: { color: 'rgba(255,255,255,0.2)', dash: 'dot' },
+                        }],
+                    };
+
+                    Plotly.newPlot('prediction-chart', traces, layout, { responsive: true, displaylogo: false });
+                    predChartLoaded = true;
+                }
+            })
+            .catch(err => {
+                console.error('Prediction chart failed:', err);
+                chartDiv.innerHTML = '<div class="loading-overlay text-danger">Failed to load prediction data.</div>';
             });
     }
 
-    // Trigger Initial Updates
-    updateDashboardAnalysis();
-    fetchAndRenderAlerts();
-});
+    // ── FACTOR ANALYSIS ───────────────────────────────────────────────────
+    let factorLoaded = false;
+    function loadFactorAnalysis() {
+        if (factorLoaded) return;
 
-// Safe helper
-function _setEl(id, val) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = val;
-}
+        fetchJSON(apiUrl('/api/factor-analysis'))
+            .then(data => {
+                factorData = data;
+
+                // Render radar chart
+                if (data.radar_chart_json) {
+                    const radarData = JSON.parse(data.radar_chart_json);
+                    Plotly.newPlot('radar-chart', radarData.data, radarData.layout, {
+                        responsive: true,
+                        displaylogo: false,
+                        displayModeBar: false,
+                    });
+                }
+
+                // Render factor score cards
+                if (data.factor_scores) {
+                    renderFactorCards(data.factor_scores);
+                }
+
+                // Render bar chart (RF feature importance)
+                if (data.bar_chart_json) {
+                    try {
+                        const barData = JSON.parse(data.bar_chart_json);
+                        Plotly.newPlot('factor-bar-chart', barData.data, barData.layout, { responsive: true, displaylogo: false });
+                    } catch (e) { }
+                }
+
+                // Render pie chart
+                if (data.pie_chart_json) {
+                    try {
+                        const pieData = JSON.parse(data.pie_chart_json);
+                        Plotly.newPlot('factor-pie-chart', pieData.data, pieData.layout, { responsive: true, displaylogo: false });
+                    } catch (e) { }
+                }
+
+                // Key findings text
+                if (data.factor_scores && data.factor_scores.length > 0) {
+                    const sorted = [...data.factor_scores].sort((a, b) => b.score - a.score);
+                    const top3 = sorted.slice(0, 3).map(f => f.label).join(', ');
+                    setEl('factor-findings',
+                        `The top contributing heat factors for ${HS.name} are: ${top3}. ` +
+                        `Data source: ${data.data_source === 'gee' ? 'Google Earth Engine satellite imagery' : 'Climatological regression model'}.`
+                    );
+                }
+
+                factorLoaded = true;
+            })
+            .catch(err => {
+                console.error('Factor analysis failed:', err);
+                document.getElementById('radar-chart').innerHTML = '<div class="loading-overlay text-danger">Failed to load factor data.</div>';
+            });
+    }
+
+    function renderFactorCards(factors) {
+        const container = document.getElementById('factor-scores-container');
+        container.innerHTML = factors.map(f => `
+            <div class="factor-card mb-2">
+                <span class="factor-icon">${f.icon}</span>
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between">
+                        <span class="factor-label">${f.label}</span>
+                        <span class="factor-value" style="color:${f.color};">${f.value}${f.unit ? ' ' + f.unit : ''}</span>
+                    </div>
+                    <div class="factor-bar">
+                        <div class="factor-bar-fill" style="width:${f.score}%;background:${f.color};"></div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <small style="font-size:0.65rem;color:var(--text-muted);">${f.direction === 'heat' ? '🔥 Heat factor' : '❄️ Cooling factor'}</small>
+                        <small style="font-size:0.65rem;color:var(--text-muted);">${f.score}/100</small>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // ── MITIGATION ────────────────────────────────────────────────────────
+    window.selectStrategy = function (el) {
+        document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('selected'));
+        el.classList.add('selected');
+        selectedStrategy = el.dataset.strategy;
+    };
+
+    window.runMitigation = function () {
+        const btn = document.getElementById('btn-run-mitigation');
+        btn.innerHTML = '<div class="hs-spinner" style="width:16px;height:16px;border-width:2px;"></div> Simulating...';
+        btn.disabled = true;
+
+        fetch('/api/mitigation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                lat: HS.lat,
+                lon: HS.lon,
+                name: HS.name,
+                radius: HS.radius,
+                scenario_type: selectedStrategy,
+            }),
+        })
+            .then(r => r.json())
+            .then(data => {
+                btn.innerHTML = '<i class="fa-solid fa-play me-1"></i> Run Simulation';
+                btn.disabled = false;
+
+                document.getElementById('mitigation-results').classList.remove('d-none');
+
+                setEl('mit-before-chi', data.before_chi.toFixed(3));
+                setEl('mit-after-chi', data.after_chi.toFixed(3));
+                setEl('mit-lst-reduction', '-' + data.lst_reduction_celsius.toFixed(1) + '°C');
+                const pct = ((data.before_chi - data.after_chi) / data.before_chi * 100).toFixed(1);
+                setEl('mit-pct', '-' + pct + '%');
+
+                // Before/After comparison chart
+                const chiTrace = {
+                    x: ['Before', 'After'],
+                    y: [data.before_chi, data.after_chi],
+                    type: 'bar',
+                    marker: {
+                        color: ['#ef4444', '#10b981'],
+                        line: { width: 0 },
+                    },
+                    text: [data.before_chi.toFixed(3), data.after_chi.toFixed(3)],
+                    textposition: 'outside',
+                    textfont: { color: '#fff', size: 14 },
+                };
+                Plotly.newPlot('mit-chi-chart', [chiTrace], {
+                    title: 'CHI Before vs After',
+                    yaxis: { range: [0, 1], gridcolor: 'rgba(255,255,255,0.05)' },
+                    xaxis: { },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    margin: { t: 40, b: 40, l: 40, r: 20 },
+                }, { responsive: true, displaylogo: false });
+
+                // Gauge chart
+                const gaugeTrace = {
+                    type: 'indicator',
+                    mode: 'gauge+number+delta',
+                    value: data.after_chi,
+                    delta: { reference: data.before_chi, decreasing: { color: '#10b981' } },
+                    gauge: {
+                        axis: { range: [0, 1] },
+                        bar: { color: '#10b981' },
+                        steps: [
+                            { range: [0, 0.35], color: 'rgba(39,174,96,0.15)' },
+                            { range: [0.35, 0.55], color: 'rgba(241,196,15,0.15)' },
+                            { range: [0.55, 0.75], color: 'rgba(230,126,34,0.15)' },
+                            { range: [0.75, 1], color: 'rgba(239,68,68,0.15)' },
+                        ],
+                        threshold: {
+                            line: { color: '#ef4444', width: 3 },
+                            thickness: 0.8,
+                            value: data.before_chi,
+                        },
+                    },
+                    title: { text: 'Post-Mitigation CHI' },
+                };
+                Plotly.newPlot('mit-gauge-chart', [gaugeTrace], {
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    margin: { t: 30, b: 10, l: 30, r: 30 },
+                    font: { color: '#f5f5f5' },
+                }, { responsive: true, displaylogo: false });
+            })
+            .catch(err => {
+                console.error('Mitigation failed:', err);
+                btn.innerHTML = '<i class="fa-solid fa-play me-1"></i> Run Simulation';
+                btn.disabled = false;
+            });
+    };
+
+    // ── BEFORE & AFTER ────────────────────────────────────────────────────
+    window.loadBeforeAfter = function () {
+        const strategy = document.getElementById('ba-strategy')?.value || 'vegetation_expansion';
+        const loading = document.getElementById('ba-loading');
+        const stats = document.getElementById('ba-stats');
+        loading.style.display = 'flex';
+        stats.style.display = 'none';
+
+        fetchJSON(apiUrl(`/api/before-after-maps?strategy=${strategy}`))
+            .then(data => {
+                // Load HTML into iframes via srcdoc
+                const beforeIframe = document.getElementById('ba-before-iframe');
+                const afterIframe = document.getElementById('ba-after-iframe');
+                beforeIframe.srcdoc = data.before_html;
+                afterIframe.srcdoc = data.after_html;
+                loading.style.display = 'none';
+
+                // Also run mitigation to get delta stats
+                return fetch('/api/mitigation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat: HS.lat, lon: HS.lon, name: HS.name, radius: HS.radius, scenario_type: strategy }),
+                });
+            })
+            .then(r => r.json())
+            .then(mitData => {
+                stats.style.display = '';
+                stats.style.display = 'flex';
+                const chiDelta = (mitData.before_chi - mitData.after_chi).toFixed(3);
+                setEl('ba-chi-delta', '-' + chiDelta);
+                setEl('ba-lst-delta', '-' + mitData.lst_reduction_celsius.toFixed(1) + '°C');
+                setEl('ba-risk-before', mitData.before_risk || '—');
+                setEl('ba-risk-after', mitData.after_risk || '—');
+            })
+            .catch(err => {
+                console.error('Before/After failed:', err);
+                loading.innerHTML = '<span class="text-danger">Failed to load comparison.</span>';
+            });
+    };
+
+    // Initialize Before/After swipe slider
+    function initSwipeSlider() {
+        const wrapper = document.getElementById('ba-wrapper');
+        const slider = document.getElementById('ba-slider');
+        const before = document.getElementById('ba-before');
+        if (!wrapper || !slider || !before) return;
+
+        let isDragging = false;
+
+        function setPosition(x) {
+            const rect = wrapper.getBoundingClientRect();
+            let pct = ((x - rect.left) / rect.width) * 100;
+            pct = Math.max(5, Math.min(95, pct));
+            slider.style.left = pct + '%';
+            before.style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
+        }
+
+        slider.addEventListener('mousedown', () => { isDragging = true; });
+        window.addEventListener('mouseup', () => { isDragging = false; });
+        window.addEventListener('mousemove', (e) => { if (isDragging) setPosition(e.clientX); });
+
+        // Touch support
+        slider.addEventListener('touchstart', () => { isDragging = true; });
+        window.addEventListener('touchend', () => { isDragging = false; });
+        window.addEventListener('touchmove', (e) => {
+            if (isDragging && e.touches.length) setPosition(e.touches[0].clientX);
+        });
+    }
+    document.addEventListener('DOMContentLoaded', initSwipeSlider);
+
+    // ── HEALTH RISK ───────────────────────────────────────────────────────
+    function loadHealthRisk() {
+        fetchJSON(apiUrl('/api/health-risk'))
+            .then(data => {
+                healthData = data;
+                setEl('hr-hhri', data.hhri.toFixed(3));
+                setEl('hr-chi', data.chi.toFixed(3));
+                setEl('hr-advisory', data.advisory);
+
+                const hhriEl = document.getElementById('hr-hhri');
+                if (hhriEl) hhriEl.style.color = riskColor(data.risk_level);
+
+                const badgeDiv = document.getElementById('hr-risk-badge');
+                if (badgeDiv) {
+                    const cls = data.risk_level.toLowerCase().replace(' ', '');
+                    badgeDiv.innerHTML = `<span class="risk-badge ${cls}">${data.risk_icon} ${data.risk_level} — ${data.action}</span>`;
+                }
+            })
+            .catch(err => console.error('Health risk failed:', err));
+    }
+
+    // ── ALERTS & AGE PRECAUTIONS ──────────────────────────────────────────
+    let alertsLoaded = false;
+    function loadAlertsPrecautions() {
+        if (alertsLoaded) return;
+
+        // Load age-specific precautions
+        fetchJSON(apiUrl('/api/health-risk'))
+            .then(data => {
+                const container = document.getElementById('age-cards-container');
+                if (data.age_precautions && data.age_precautions.length > 0) {
+                    container.innerHTML = data.age_precautions.map(group => `
+                        <div class="col-md-4 col-lg-4 mb-3">
+                            <div class="age-card ${group.key}">
+                                <div class="age-icon">${group.icon}</div>
+                                <div class="age-title" style="color:${group.color};">${group.label}</div>
+                                <ul class="precaution-list">
+                                    ${group.precautions.map(p => `<li>${p}</li>`).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p class="text-muted">No precaution data available.</p>';
+                }
+            })
+            .catch(err => {
+                console.error('Precautions failed:', err);
+                document.getElementById('age-cards-container').innerHTML = '<p class="text-danger">Failed to load precautions.</p>';
+            });
+
+        // Load system alerts
+        fetchJSON('/api/alerts')
+            .then(alerts => {
+                const container = document.getElementById('system-alerts-container');
+                if (alerts.length === 0) {
+                    container.innerHTML = '<p class="text-muted">No active alerts.</p>';
+                    return;
+                }
+                container.innerHTML = alerts.slice(0, 10).map(a => {
+                    const cls = a.risk_level === 'Very High' ? 'danger' : a.risk_level === 'High' ? 'warning' : 'secondary';
+                    return `
+                    <div class="alert-toast mb-2">
+                        <span class="fs-4">${a.risk_level === 'Very High' ? '🔴' : a.risk_level === 'High' ? '🟠' : '🟡'}</span>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between">
+                                <strong style="font-size:0.85rem;">${a.district_name}</strong>
+                                <span class="badge bg-${cls}" style="font-size:0.7rem;">${a.risk_level}</span>
+                            </div>
+                            <small class="text-muted">${a.advisory_message.substring(0, 150)}...</small>
+                            <div class="text-muted" style="font-size:0.7rem;">Date: ${a.alert_date} | Status: ${a.status}</div>
+                        </div>
+                    </div>`;
+                }).join('');
+                alertsLoaded = true;
+            })
+            .catch(err => {
+                console.error('Alerts fetch failed:', err);
+                document.getElementById('system-alerts-container').innerHTML = '<p class="text-danger">Failed to load alerts.</p>';
+            });
+
+        alertsLoaded = true;
+    }
+
+    // ── REPORTS ───────────────────────────────────────────────────────────
+    window.downloadReport = function (type) {
+        const params = `lat=${HS.lat}&lon=${HS.lon}&name=${encodeURIComponent(HS.name)}&radius=${HS.radius}`;
+        if (type === 'pdf') {
+            window.open(`/api/download-pdf?${params}`, '_blank');
+        } else {
+            window.location.href = `/api/download-report?${params}`;
+        }
+    };
+
+    // ── MAP REFRESH ───────────────────────────────────────────────────────
+    window.refreshMap = function () {
+        const iframe = document.getElementById('main-map-iframe');
+        if (iframe) {
+            iframe.src = apiUrl('/api/map-layers');
+        }
+    };
+
+    // ── UTILITY ───────────────────────────────────────────────────────────
+    function setEl(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
+    function riskColor(level) {
+        const colors = {
+            'Low': '#10b981',
+            'Moderate': '#eab308',
+            'High': '#e67e22',
+            'Very High': '#ef4444',
+        };
+        return colors[level] || '#f5f5f5';
+    }
+
+})();

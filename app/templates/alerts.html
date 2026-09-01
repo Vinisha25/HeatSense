@@ -6,13 +6,15 @@
 <div class="container">
 
     <!-- Page Header -->
-    <div class="row mb-4">
-        <div class="col">
-            <h1 class="h2 fw-bold text-dark">🏥 Heat Health Risk Dashboard</h1>
-            <p class="text-muted">
-                Real-time Heat Health Risk Index (HHRI) computed per district using the
-                trained Random Forest model, air temperature, humidity, and population vulnerability.
-            </p>
+    <div class="row mb-4 mt-3">
+        <div class="col d-flex align-items-center gap-3">
+            <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="HeatSense Logo" style="width:48px;height:48px;border-radius:12px;background:white;padding:2px;border:1px solid rgba(249,115,22,0.4);">
+            <div>
+                <h1 class="h2 fw-bold mb-1 text-gradient">Heat Health Risk Dashboard</h1>
+                <p class="text-muted mb-0">
+                    Real-time Heat Health Risk Index (HHRI) computed per district using satellite data, ML model, air temperature, humidity, and population vulnerability.
+                </p>
+            </div>
         </div>
     </div>
 

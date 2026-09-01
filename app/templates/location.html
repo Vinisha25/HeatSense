@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Location — HeatSense</title>
+    <meta name="description" content="Select your location in Karnataka to begin heat analysis.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet.js for interactive map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --orange: #f97316;
+            --orange-deep: #ea580c;
+            --dark: #0a0a0a;
+            --panel: rgba(14,14,14,0.97);
+            --border: rgba(255,255,255,0.08);
+            --text-muted: rgba(255,255,255,0.45);
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--dark);
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top header bar */
+        .location-header {
+            height: 60px;
+            background: rgba(10,10,10,0.98);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1.5rem;
+            z-index: 1000;
+            flex-shrink: 0;
+        }
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .header-brand .logo { font-size: 1.4rem; }
+        .header-brand .name { font-size: 1.1rem; font-weight: 700; background: linear-gradient(135deg, #fb923c, #f97316); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .header-step {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+        .step-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+        .step-badge.done { background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+        .step-badge.active { background: rgba(249,115,22,0.2); color: var(--orange); border: 1px solid rgba(249,115,22,0.4); }
+        .step-badge.pending { background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border); }
+        .step-sep { color: var(--border); font-size: 0.7rem; }
+
+        /* Main layout */
+        .location-body {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Left control panel */
+        .location-sidebar {
+            width: 380px;
+            flex-shrink: 0;
+            background: var(--panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-inner {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+        .sidebar-inner::-webkit-scrollbar { width: 4px; }
+        .sidebar-inner::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-inner::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+        .section-title {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 0.85rem;
+        }
+
+        /* GPS Button */
+        .btn-gps {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            padding: 0.9rem 1.1rem;
+            background: linear-gradient(135deg, rgba(249,115,22,0.15), rgba(234,88,12,0.1));
+            border: 1px solid rgba(249,115,22,0.3);
+            border-radius: 12px;
+            color: var(--orange);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            margin-bottom: 1rem;
+        }
+        .btn-gps:hover { background: linear-gradient(135deg, rgba(249,115,22,0.25), rgba(234,88,12,0.2)); transform: translateY(-1px); }
+        .btn-gps i { font-size: 1rem; }
+        .gps-loading { display: none; }
+        .btn-gps.loading .gps-icon { display: none; }
+        .btn-gps.loading .gps-loading { display: block; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Search box */
+        .search-wrapper {
+            position: relative;
+            margin-bottom: 0.6rem;
+        }
+        .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.85rem; }
+        .search-input {
+            width: 100%;
+            padding: 0.8rem 1rem 0.8rem 2.4rem;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: white;
+            font-size: 0.88rem;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-input:focus { border-color: rgba(249,115,22,0.4); }
+
+        /* Autocomplete dropdown */
+        .search-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: rgba(20,20,20,0.99);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            z-index: 999;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+            max-height: 240px;
+            overflow-y: auto;
+        }
+        .search-dropdown.open { display: block; }
+        .dropdown-item {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            transition: background 0.15s;
+            font-size: 0.83rem;
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: rgba(249,115,22,0.1); }
+        .dropdown-item .place-name { font-weight: 500; color: rgba(255,255,255,0.9); }
+        .dropdown-item .place-detail { font-size: 0.72rem; color: var(--text-muted); }
+        .dropdown-item .place-icon { color: var(--orange); font-size: 0.8rem; flex-shrink: 0; }
+
+        /* Search hint */
+        .search-hint { font-size: 0.73rem; color: var(--text-muted); margin-bottom: 1.5rem; }
+
+        /* Separator */
+        .sep { height: 1px; background: var(--border); margin: 1.25rem 0; }
+
+        /* Selected location card */
+        .location-card {
+            background: rgba(249,115,22,0.07);
+            border: 1px solid rgba(249,115,22,0.2);
+            border-radius: 14px;
+            padding: 1.1rem;
+            margin-bottom: 1.25rem;
+            animation: cardReveal 0.4s ease;
+            display: none;
+        }
+        .location-card.show { display: block; }
+        @keyframes cardReveal {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .location-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.85rem;
+        }
+        .loc-name { font-size: 1.1rem; font-weight: 700; }
+        .loc-badge {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.65rem;
+            background: rgba(249,115,22,0.2);
+            color: var(--orange);
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        .loc-detail-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-bottom: 0.6rem;
+        }
+        .loc-detail {
+            padding: 0.5rem 0.7rem;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+        }
+        .loc-detail .label { font-size: 0.68rem; color: var(--text-muted); margin-bottom: 0.15rem; }
+        .loc-detail .value { font-size: 0.82rem; font-weight: 600; }
+        .loc-coords { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
+
+        /* AOI radius selector */
+        .aoi-selector { margin-bottom: 1.5rem; }
+        .aoi-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+        .aoi-label span { font-size: 0.82rem; }
+        .aoi-label .aoi-val { font-weight: 700; color: var(--orange); }
+        .aoi-slider {
+            width: 100%;
+            -webkit-appearance: none;
+            height: 4px;
+            border-radius: 4px;
+            background: linear-gradient(to right, var(--orange) 0%, var(--orange) var(--pct, 40%), rgba(255,255,255,0.1) var(--pct, 40%), rgba(255,255,255,0.1) 100%);
+            outline: none;
+            cursor: pointer;
+        }
+        .aoi-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--orange);
+            box-shadow: 0 0 8px rgba(249,115,22,0.5);
+            cursor: pointer;
+        }
+
+        /* Analyze button */
+        .btn-analyze {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, #f97316, #ea580c);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            transition: all 0.25s ease;
+            box-shadow: 0 6px 20px rgba(249,115,22,0.35);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .btn-analyze.ready {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .btn-analyze.ready:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 28px rgba(249,115,22,0.45);
+        }
+
+        /* Quick select buttons */
+        .quick-select { margin-bottom: 1.5rem; }
+        .quick-title { font-size: 0.72rem; font-weight: 600; letter-spacing: 1.5px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.6rem; }
+        .quick-btns { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+        .quick-btn {
+            padding: 0.35rem 0.8rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            color: rgba(255,255,255,0.65);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .quick-btn:hover { background: rgba(249,115,22,0.1); border-color: rgba(249,115,22,0.3); color: var(--orange); }
+
+        /* Map container */
+        #location-map {
+            flex: 1;
+            z-index: 1;
+        }
+
+        /* Map tooltip */
+        .map-click-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            color: rgba(255,255,255,0.7);
+            padding: 0.5rem 1.1rem;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            pointer-events: none;
+            z-index: 500;
+            border: 1px solid rgba(255,255,255,0.1);
+            white-space: nowrap;
+        }
+
+        /* Leaflet popup customization */
+        .leaflet-popup-content-wrapper {
+            background: rgba(15,15,15,0.97) !important;
+            color: white !important;
+            border: 1px solid rgba(249,115,22,0.3) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+        }
+        .leaflet-popup-tip { background: rgba(15,15,15,0.97) !important; }
+        .leaflet-popup-close-button { color: rgba(255,255,255,0.5) !important; }
+
+        /* Status bar */
+        .sidebar-status {
+            padding: 0.75rem 1.5rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: blink 2s ease-in-out infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="location-header">
+        <div class="header-brand">
+            <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="HeatSense Logo" style="width:34px;height:34px;border-radius:8px;background:white;padding:2px;border:1px solid rgba(249,115,22,0.4);">
+            <span class="name">HeatSense</span>
+        </div>
+        <div class="header-step">
+            <span class="step-badge done">✓</span> Login
+            <span class="step-sep">›</span>
+            <span class="step-badge active">2</span> Select Location
+            <span class="step-sep">›</span>
+            <span class="step-badge pending">3</span> Analysis Dashboard
+        </div>
+        <div style="width:120px;"></div>
+    </div>
+
+    <div class="location-body" style="position:relative;">
+
+        <!-- Left sidebar -->
+        <div class="location-sidebar">
+            <div class="sidebar-inner">
+
+                <p class="section-title">📍 Choose Analysis Location</p>
+
+                <!-- GPS button -->
+                <button class="btn-gps" id="btn-gps" onclick="useGPS()">
+                    <i class="fa-solid fa-location-crosshairs gps-icon"></i>
+                    <i class="fa-solid fa-spinner gps-loading"></i>
+                    <div>
+                        <div style="font-size:0.88rem;">Use My Current Location</div>
+                        <div style="font-size:0.72rem;opacity:0.6;font-weight:400;">Auto-detect via GPS</div>
+                    </div>
+                </button>
+
+                <!-- Search -->
+                <div class="search-wrapper" id="search-wrapper">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" class="search-input" id="search-input"
+                           placeholder="Search city, town, village in Karnataka..."
+                           autocomplete="off"
+                           oninput="onSearchInput(this.value)"
+                           onkeydown="onSearchKeydown(event)">
+                    <div class="search-dropdown" id="search-dropdown"></div>
+                </div>
+                <div class="search-hint">Search any district, taluk, city, town, or village in Karnataka</div>
+
+                <!-- Quick select -->
+                <div class="quick-select">
+                    <div class="quick-title">⚡ Quick Select</div>
+                    <div class="quick-btns">
+                        <button class="quick-btn" onclick="quickSelect('Bengaluru', 12.9716, 77.5946)">Bengaluru</button>
+                        <button class="quick-btn" onclick="quickSelect('Mysuru', 12.2958, 76.6394)">Mysuru</button>
+                        <button class="quick-btn" onclick="quickSelect('Mangaluru', 12.9141, 74.8560)">Mangaluru</button>
+                        <button class="quick-btn" onclick="quickSelect('Hubli', 15.3647, 75.1240)">Hubli</button>
+                        <button class="quick-btn" onclick="quickSelect('Belagavi', 15.8497, 74.4977)">Belagavi</button>
+                        <button class="quick-btn" onclick="quickSelect('Kalaburagi', 17.3297, 76.8343)">Kalaburagi</button>
+                        <button class="quick-btn" onclick="quickSelect('Surathkal', 13.0130, 74.7920)">Surathkal</button>
+                        <button class="quick-btn" onclick="quickSelect('Udupi', 13.3409, 74.7421)">Udupi</button>
+                        <button class="quick-btn" onclick="quickSelect('Shimoga', 13.9299, 75.5681)">Shimoga</button>
+                        <button class="quick-btn" onclick="quickSelect('Davanagere', 14.4644, 75.9218)">Davanagere</button>
+                        <button class="quick-btn" onclick="quickSelect('Bidar', 17.9104, 77.5199)">Bidar</button>
+                        <button class="quick-btn" onclick="quickSelect('Tumakuru', 13.3409, 77.1010)">Tumakuru</button>
+                    </div>
+                </div>
+
+                <div class="sep"></div>
+
+                <!-- Selected location card -->
+                <div class="location-card" id="location-card">
+                    <div class="location-card-header">
+                        <div class="loc-name" id="loc-name">—</div>
+                        <span class="loc-badge" id="loc-badge">District</span>
+                    </div>
+                    <div class="loc-detail-row">
+                        <div class="loc-detail">
+                            <div class="label">District</div>
+                            <div class="value" id="loc-district">—</div>
+                        </div>
+                        <div class="loc-detail">
+                            <div class="label">State</div>
+                            <div class="value" id="loc-state">Karnataka</div>
+                        </div>
+                        <div class="loc-detail">
+                            <div class="label">Latitude</div>
+                            <div class="value" id="loc-lat">—</div>
+                        </div>
+                        <div class="loc-detail">
+                            <div class="label">Longitude</div>
+                            <div class="value" id="loc-lon">—</div>
+                        </div>
+                    </div>
+                    <div class="loc-detail" style="margin-top:0.4rem;">
+                        <div class="label">Place Type</div>
+                        <div class="value" id="loc-type">—</div>
+                    </div>
+                </div>
+
+                <!-- AOI radius -->
+                <div class="aoi-selector" id="aoi-selector" style="display:none;">
+                    <div class="aoi-label">
+                        <span>Analysis Radius (AOI)</span>
+                        <span class="aoi-val" id="aoi-val">15 km</span>
+                    </div>
+                    <input type="range" class="aoi-slider" id="aoi-slider"
+                           min="5" max="50" value="15" step="5"
+                           oninput="updateAOI(this.value)">
+                    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">Area of Interest buffer around selected point</div>
+                </div>
+
+                <!-- Analyze button -->
+                <button class="btn-analyze" id="btn-analyze" onclick="proceedToAnalysis()">
+                    <i class="fa-solid fa-chart-mixed"></i>
+                    Analyze This Location
+                </button>
+
+            </div>
+
+            <!-- Status bar -->
+            <div class="sidebar-status">
+                <div class="status-dot" id="status-dot"></div>
+                <span id="status-text">Click on the map or search to select a location</span>
+            </div>
+        </div>
+
+        <!-- Map -->
+        <div id="location-map" style="position:relative;">
+            <div class="map-click-hint" id="map-hint">🗺️ Click anywhere on the map to select a location</div>
+        </div>
+
+    </div>
+
+    <script>
+        // ── State ─────────────────────────────────────────────────────────────
+        let selectedLat = null, selectedLon = null, selectedName = null;
+        let currentMarker = null, aoiCircle = null;
+        let searchTimeout = null;
+        let aoiRadius = 15000; // metres
+
+        // ── Initialize Leaflet map ────────────────────────────────────────────
+        const map = L.map('location-map', {
+            center: [14.5, 75.7],
+            zoom: 7,
+            zoomControl: true,
+        });
+
+        // Premium dark tile layer
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors, © CARTO',
+            subdomains: 'abcd',
+            maxZoom: 18
+        }).addTo(map);
+
+        // Custom orange marker
+        const orangeIcon = L.divIcon({
+            className: '',
+            html: `<div style="
+                width:32px;height:32px;
+                background:linear-gradient(135deg,#f97316,#ea580c);
+                border-radius:50% 50% 50% 0;
+                transform:rotate(-45deg);
+                border:3px solid white;
+                box-shadow:0 4px 16px rgba(249,115,22,0.6);
+            "></div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+        });
+
+        // Map click handler
+        map.on('click', (e) => {
+            setLocation(e.latlng.lat, e.latlng.lng, null);
+        });
+
+        // ── GPS Location ──────────────────────────────────────────────────────
+        function useGPS() {
+            const btn = document.getElementById('btn-gps');
+            btn.classList.add('loading');
+            setStatus('Detecting GPS location...', true);
+            if (!navigator.geolocation) {
+                btn.classList.remove('loading');
+                setStatus('GPS not supported by this browser');
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    btn.classList.remove('loading');
+                    setLocation(pos.coords.latitude, pos.coords.longitude, null);
+                },
+                (err) => {
+                    btn.classList.remove('loading');
+                    setStatus('GPS access denied. Please search manually.');
+                },
+                { timeout: 10000, maximumAge: 60000, enableHighAccuracy: true }
+            );
+        }
+
+        // ── Set selected location ─────────────────────────────────────────────
+        async function setLocation(lat, lon, name) {
+            selectedLat = lat;
+            selectedLon = lon;
+            map.setView([lat, lon], Math.max(map.getZoom(), 13));
+
+            // Place marker
+            if (currentMarker) map.removeLayer(currentMarker);
+            if (aoiCircle) map.removeLayer(aoiCircle);
+
+            currentMarker = L.marker([lat, lon], { icon: orangeIcon }).addTo(map);
+
+            aoiCircle = L.circle([lat, lon], {
+                radius: aoiRadius,
+                color: '#f97316',
+                fillColor: '#f97316',
+                fillOpacity: 0.06,
+                weight: 2,
+                dashArray: '6 4',
+            }).addTo(map);
+
+            // Reverse geocode
+            setStatus('Reverse geocoding location...', true);
+            if (!name) {
+                name = await reverseGeocode(lat, lon);
+            }
+
+            selectedName = name;
+            currentMarker.bindPopup(`<b style="color:#f97316;">${name}</b><br><small>${lat.toFixed(5)}, ${lon.toFixed(5)}</small>`).openPopup();
+
+            document.getElementById('map-hint').style.display = 'none';
+            updateLocationCard(lat, lon, name);
+            enableAnalyze();
+            setStatus(`✓ Location selected: ${name}`);
+        }
+
+        // ── Reverse geocode via Nominatim ─────────────────────────────────────
+        async function reverseGeocode(lat, lon) {
+            try {
+                const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
+                const data = await res.json();
+                return data.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+            } catch {
+                return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+            }
+        }
+
+        // ── Update location card UI ───────────────────────────────────────────
+        async function updateLocationCard(lat, lon, name) {
+            try {
+                const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}&full=1`);
+                const data = await res.json();
+
+                document.getElementById('loc-name').textContent = data.name || name;
+                document.getElementById('loc-district').textContent = data.district || '—';
+                document.getElementById('loc-state').textContent = data.state || 'Karnataka';
+                document.getElementById('loc-lat').textContent = lat.toFixed(5);
+                document.getElementById('loc-lon').textContent = lon.toFixed(5);
+                document.getElementById('loc-type').textContent = data.type || 'Point';
+                document.getElementById('loc-badge').textContent = data.level || 'Location';
+
+                document.getElementById('location-card').classList.add('show');
+                document.getElementById('aoi-selector').style.display = 'block';
+            } catch (e) {
+                document.getElementById('loc-name').textContent = name;
+                document.getElementById('loc-lat').textContent = lat.toFixed(5);
+                document.getElementById('loc-lon').textContent = lon.toFixed(5);
+                document.getElementById('location-card').classList.add('show');
+                document.getElementById('aoi-selector').style.display = 'block';
+            }
+        }
+
+        // ── Search ────────────────────────────────────────────────────────────
+        function onSearchInput(val) {
+            clearTimeout(searchTimeout);
+            const dropdown = document.getElementById('search-dropdown');
+            if (val.length < 2) { dropdown.classList.remove('open'); return; }
+            searchTimeout = setTimeout(() => searchLocation(val), 350);
+        }
+
+        async function searchLocation(q) {
+            try {
+                const res = await fetch(`/api/search-location?q=${encodeURIComponent(q)}`);
+                const results = await res.json();
+                renderDropdown(results);
+            } catch (e) {
+                console.error('Search failed:', e);
+            }
+        }
+
+        function renderDropdown(results) {
+            const dropdown = document.getElementById('search-dropdown');
+            if (!results.length) { dropdown.classList.remove('open'); return; }
+            dropdown.innerHTML = results.slice(0, 8).map(r => `
+                <div class="dropdown-item" onclick="selectSearchResult(${r.lat}, ${r.lon}, '${r.display_name.replace(/'/g,"\\'")}')">
+                    <i class="fa-solid fa-location-dot place-icon"></i>
+                    <div>
+                        <div class="place-name">${r.name}</div>
+                        <div class="place-detail">${r.display_name}</div>
+                    </div>
+                </div>
+            `).join('');
+            dropdown.classList.add('open');
+        }
+
+        function selectSearchResult(lat, lon, name) {
+            document.getElementById('search-dropdown').classList.remove('open');
+            document.getElementById('search-input').value = '';
+            setLocation(parseFloat(lat), parseFloat(lon), name);
+        }
+
+        function onSearchKeydown(e) {
+            if (e.key === 'Escape') {
+                document.getElementById('search-dropdown').classList.remove('open');
+            }
+        }
+
+        // Close dropdown on outside click
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('search-wrapper').contains(e.target)) {
+                document.getElementById('search-dropdown').classList.remove('open');
+            }
+        });
+
+        // ── Quick select ──────────────────────────────────────────────────────
+        function quickSelect(name, lat, lon) {
+            setLocation(lat, lon, name);
+        }
+
+        // ── AOI slider ────────────────────────────────────────────────────────
+        function updateAOI(val) {
+            aoiRadius = parseInt(val) * 1000;
+            document.getElementById('aoi-val').textContent = val + ' km';
+            const slider = document.getElementById('aoi-slider');
+            const pct = ((val - 5) / (50 - 5)) * 100;
+            slider.style.setProperty('--pct', pct + '%');
+            if (aoiCircle) aoiCircle.setRadius(aoiRadius);
+        }
+
+        // ── Enable/disable analyze button ─────────────────────────────────────
+        function enableAnalyze() {
+            document.getElementById('btn-analyze').classList.add('ready');
+        }
+
+        // ── Proceed to analysis ───────────────────────────────────────────────
+        async function proceedToAnalysis() {
+            if (!selectedLat) return;
+            setStatus('Initializing analysis...', true);
+            const btn = document.getElementById('btn-analyze');
+            btn.innerHTML = '<i class="fa-solid fa-spinner" style="animation:spin 0.8s linear infinite;"></i> Loading Dashboard...';
+
+            try {
+                const res = await fetch('/api/analyze-location', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lat: selectedLat,
+                        lon: selectedLon,
+                        name: selectedName,
+                        radius_km: aoiRadius / 1000,
+                    })
+                });
+                const data = await res.json();
+                if (data.location_id) {
+                    window.location.href = `/dashboard?location_id=${data.location_id}&lat=${selectedLat}&lon=${selectedLon}&name=${encodeURIComponent(selectedName || '')}&radius=${aoiRadius / 1000}`;
+                } else {
+                    window.location.href = `/dashboard?lat=${selectedLat}&lon=${selectedLon}&name=${encodeURIComponent(selectedName || '')}&radius=${aoiRadius / 1000}`;
+                }
+            } catch (e) {
+                window.location.href = `/dashboard?lat=${selectedLat}&lon=${selectedLon}&name=${encodeURIComponent(selectedName || '')}&radius=${aoiRadius / 1000}`;
+            }
+        }
+
+        // ── Status bar ────────────────────────────────────────────────────────
+        function setStatus(text, loading = false) {
+            document.getElementById('status-text').textContent = text;
+            const dot = document.getElementById('status-dot');
+            dot.style.background = loading ? '#f97316' : '#10b981';
+        }
+    </script>
+</body>
+</html>

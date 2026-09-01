@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HeatSense — AI Urban Heat Island Analysis</title>
+    <meta name="description" content="HeatSense — AI-Based Urban Heat Island Analysis, Prediction and Health Alert System for Karnataka, India">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --orange-primary: #f97316;
+            --orange-deep: #ea580c;
+            --orange-light: #fb923c;
+            --orange-glow: rgba(249, 115, 22, 0.4);
+            --red-heat: #ef4444;
+            --yellow-heat: #eab308;
+            --dark-bg: #0a0a0a;
+            --dark-card: #111111;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--dark-bg);
+            color: white;
+            min-height: 100vh;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Animated background gradient */
+        .splash-bg {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at 20% 50%, rgba(249,115,22,0.15) 0%, transparent 50%),
+                        radial-gradient(ellipse at 80% 20%, rgba(239,68,68,0.12) 0%, transparent 50%),
+                        radial-gradient(ellipse at 60% 80%, rgba(234,179,8,0.08) 0%, transparent 40%),
+                        #0a0a0a;
+            animation: bgPulse 4s ease-in-out infinite alternate;
+        }
+        @keyframes bgPulse {
+            from { opacity: 0.7; }
+            to { opacity: 1; }
+        }
+
+        /* Particle canvas */
+        #particle-canvas {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Heat wave rings */
+        .heat-ring {
+            position: fixed;
+            border-radius: 50%;
+            border: 1px solid var(--orange-primary);
+            opacity: 0;
+            animation: expandRing 3s ease-out infinite;
+        }
+        .heat-ring:nth-child(1) { width: 200px; height: 200px; top: 50%; left: 50%; transform: translate(-50%,-50%); animation-delay: 0s; }
+        .heat-ring:nth-child(2) { width: 200px; height: 200px; top: 50%; left: 50%; transform: translate(-50%,-50%); animation-delay: 1s; }
+        .heat-ring:nth-child(3) { width: 200px; height: 200px; top: 50%; left: 50%; transform: translate(-50%,-50%); animation-delay: 2s; }
+        @keyframes expandRing {
+            0% { width: 100px; height: 100px; opacity: 0.6; }
+            100% { width: 600px; height: 600px; opacity: 0; }
+        }
+
+        /* Main splash content */
+        .splash-content {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+            animation: splashReveal 1.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        @keyframes splashReveal {
+            from { opacity: 0; transform: translateY(40px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        /* Logo container */
+        .logo-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 140px;
+            height: 140px;
+            margin: 0 auto;
+        }
+        .logo-glow {
+            position: absolute;
+            inset: -20px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--orange-glow) 0%, transparent 70%);
+            animation: glowPulse 2s ease-in-out infinite alternate;
+        }
+        @keyframes glowPulse {
+            from { transform: scale(0.9); opacity: 0.7; }
+            to { transform: scale(1.1); opacity: 1; }
+        }
+        .logo-image {
+            width: 140px;
+            height: 140px;
+            border-radius: 28px;
+            object-fit: cover;
+            box-shadow: 0 0 35px rgba(249,115,22,0.45), 0 0 70px rgba(249,115,22,0.2);
+            position: relative;
+            z-index: 2;
+            background: white;
+            padding: 8px;
+            border: 2px solid rgba(249,115,22,0.6);
+        }
+
+        /* Brand text */
+        .brand-name {
+            font-size: 4rem;
+            font-weight: 900;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #fb923c 0%, #f97316 40%, #ef4444 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+        .brand-tagline {
+            font-size: 1rem;
+            font-weight: 400;
+            color: rgba(255,255,255,0.6);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+        .brand-subtitle {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: rgba(255,255,255,0.8);
+            max-width: 500px;
+            line-height: 1.6;
+        }
+
+        /* Karnataka badge */
+        .state-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 1.2rem;
+            background: rgba(249,115,22,0.15);
+            border: 1px solid rgba(249,115,22,0.3);
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--orange-light);
+        }
+
+        /* Feature pills */
+        .feature-pills {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+        .feature-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.9rem;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: rgba(255,255,255,0.7);
+            animation: pillFloat 3s ease-in-out infinite;
+        }
+        .feature-pill:nth-child(2) { animation-delay: 0.3s; }
+        .feature-pill:nth-child(3) { animation-delay: 0.6s; }
+        .feature-pill:nth-child(4) { animation-delay: 0.9s; }
+        .feature-pill:nth-child(5) { animation-delay: 1.2s; }
+        @keyframes pillFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        /* CTA Button */
+        .btn-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 2.5rem;
+            background: linear-gradient(135deg, #f97316, #ea580c);
+            color: white;
+            border: none;
+            border-radius: 16px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 30px rgba(249,115,22,0.4);
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-cta::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .btn-cta:hover::before { opacity: 1; }
+        .btn-cta:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(249,115,22,0.5);
+            color: white;
+        }
+        .btn-cta .arrow {
+            transition: transform 0.3s ease;
+        }
+        .btn-cta:hover .arrow {
+            transform: translateX(4px);
+        }
+
+        /* Loading bar */
+        .loading-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .loading-bar-track {
+            width: 250px;
+            height: 3px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .loading-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f97316, #ef4444, #eab308);
+            background-size: 200% 100%;
+            border-radius: 10px;
+            animation: loadFill 2.5s ease-out forwards, shimmer 1.5s linear infinite;
+        }
+        @keyframes loadFill {
+            from { width: 0%; }
+            to { width: 100%; }
+        }
+        @keyframes shimmer {
+            from { background-position: 0% 0%; }
+            to { background-position: 200% 0%; }
+        }
+        .loading-text {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.4);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            animation: loadTextChange 2.5s steps(1, end) forwards;
+        }
+        @keyframes loadTextChange {
+            0% { content: 'INITIALIZING SYSTEM...'; }
+            33% { content: 'LOADING GEE DATASETS...'; }
+            66% { content: 'PREPARING ANALYSIS...'; }
+        }
+
+        /* Heat meter on sides */
+        .heat-meter {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 6px;
+            height: 200px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .heat-meter.left { left: 30px; }
+        .heat-meter.right { right: 30px; }
+        .heat-meter-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(to top, #ef4444, #f97316, #eab308);
+            border-radius: 10px;
+            animation: meterRise 3s ease-in-out infinite alternate;
+        }
+        .heat-meter.left .heat-meter-fill { animation-delay: 0.5s; }
+        @keyframes meterRise {
+            from { height: 20%; }
+            to { height: 85%; }
+        }
+
+        /* Version badge */
+        .version-badge {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 0.7rem;
+            color: rgba(255,255,255,0.2);
+            z-index: 20;
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-bg"></div>
+
+    <!-- Heat ring animations -->
+    <div class="heat-ring"></div>
+    <div class="heat-ring"></div>
+    <div class="heat-ring"></div>
+
+    <!-- Particle canvas -->
+    <canvas id="particle-canvas"></canvas>
+
+    <!-- Heat meters -->
+    <div class="heat-meter left"><div class="heat-meter-fill"></div></div>
+    <div class="heat-meter right"><div class="heat-meter-fill"></div></div>
+
+    <!-- Main content -->
+    <div class="splash-content" id="splash-content">
+
+        <!-- Logo -->
+        <div class="logo-container">
+            <div class="logo-glow"></div>
+            <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="HeatSense Logo" class="logo-image">
+        </div>
+
+        <!-- Brand -->
+        <div>
+            <h1 class="brand-name">HeatSense</h1>
+            <p class="brand-tagline">Urban Heat Intelligence Platform</p>
+        </div>
+
+        <!-- State badge -->
+        <div class="state-badge">
+            <span>📍</span> Karnataka, India — AI-Powered Analysis
+        </div>
+
+        <!-- Subtitle -->
+        <p class="brand-subtitle">
+            AI-Based Urban Heat Island Analysis, Prediction and Health Alert System powered by Google Earth Engine, Machine Learning and Real-Time Satellite Data.
+        </p>
+
+        <!-- Feature pills -->
+        <div class="feature-pills">
+            <div class="feature-pill">🛰️ Google Earth Engine</div>
+            <div class="feature-pill">🤖 ML Prediction</div>
+            <div class="feature-pill">🗺️ GIS Mapping</div>
+            <div class="feature-pill">🌿 Mitigation Sim</div>
+            <div class="feature-pill">🏥 Health Alerts</div>
+        </div>
+
+        <!-- CTA Button -->
+        <a href="/login" class="btn-cta" id="btn-enter">
+            <span>Get Started</span>
+            <span class="arrow">→</span>
+        </a>
+
+        <!-- Loading bar -->
+        <div class="loading-section">
+            <div class="loading-bar-track">
+                <div class="loading-bar-fill" id="loading-bar"></div>
+            </div>
+            <div class="loading-text" id="loading-text">INITIALIZING SYSTEM...</div>
+        </div>
+
+    </div>
+
+    <div class="version-badge">HeatSense v2.0 • KarnatakaTech • 2026</div>
+
+    <script>
+        // ── Particle system ──────────────────────────────────────────────────
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        const particles = [];
+        const colors = ['rgba(249,115,22,', 'rgba(239,68,68,', 'rgba(234,179,8,', 'rgba(251,146,60,'];
+
+        for (let i = 0; i < 60; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 3 + 1,
+                speedX: (Math.random() - 0.5) * 0.6,
+                speedY: -Math.random() * 0.8 - 0.2, // mostly upward (heat rises)
+                color: colors[Math.floor(Math.random() * colors.length)],
+                opacity: Math.random() * 0.6 + 0.1,
+                life: Math.random(),
+            });
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.x += p.speedX;
+                p.y += p.speedY;
+                p.life -= 0.004;
+                if (p.life <= 0 || p.y < -10) {
+                    p.x = Math.random() * canvas.width;
+                    p.y = canvas.height + 10;
+                    p.life = Math.random();
+                    p.opacity = Math.random() * 0.5 + 0.1;
+                }
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = p.color + p.opacity * p.life + ')';
+                ctx.fill();
+            });
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+
+        // ── Loading text cycling ─────────────────────────────────────────────
+        const messages = [
+            'INITIALIZING SYSTEM...',
+            'LOADING GEE DATASETS...',
+            'CALIBRATING SENSORS...',
+            'PREPARING ANALYSIS...',
+            'READY TO LAUNCH ✓',
+        ];
+        let msgIdx = 0;
+        const loadingText = document.getElementById('loading-text');
+        const msgInterval = setInterval(() => {
+            msgIdx = (msgIdx + 1) % messages.length;
+            loadingText.style.opacity = '0';
+            setTimeout(() => {
+                loadingText.textContent = messages[msgIdx];
+                loadingText.style.opacity = '1';
+            }, 200);
+        }, 500);
+
+        // ── Auto redirect to login after 3s ──────────────────────────────────
+        setTimeout(() => {
+            clearInterval(msgInterval);
+            loadingText.textContent = 'READY TO LAUNCH ✓';
+            loadingText.style.color = 'rgba(249,115,22,0.8)';
+            document.getElementById('splash-content').style.animation = 'splashReveal 0.5s reverse forwards';
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 600);
+        }, 3000);
+
+        // ── Allow skipping splash ────────────────────────────────────────────
+        document.addEventListener('keydown', () => { window.location.href = '/login'; });
+    </script>
+</body>
+</html>

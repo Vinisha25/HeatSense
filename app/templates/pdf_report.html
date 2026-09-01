@@ -66,9 +66,12 @@
     <!-- Print Layout Content -->
     <div class="container">
         <header class="report-header d-flex justify-content-between align-items-end">
-            <div>
-                <h1 class="report-title mb-1">🔥 HeatSense Assessment Report</h1>
-                <p class="text-muted mb-0">UHI Spatial Analysis, Prediction, and Public Health Risk Advisory</p>
+            <div class="d-flex align-items-center gap-3">
+                <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="HeatSense Logo" style="width:54px;height:54px;border-radius:12px;border:1px solid #dee2e6;padding:2px;">
+                <div>
+                    <h1 class="report-title mb-1" style="font-size:1.6rem;">HeatSense Assessment Report</h1>
+                    <p class="text-muted mb-0">UHI Spatial Analysis, Prediction, and Public Health Risk Advisory</p>
+                </div>
             </div>
             <div class="text-end">
                 <span class="badge bg-secondary p-2 mb-1">Karnataka, India</span>

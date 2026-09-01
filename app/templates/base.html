@@ -3,56 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}HeatSense - UHI Analysis & Prediction{% endblock %}</title>
+    <title>{% block title %}HeatSense — AI Urban Heat Analysis{% endblock %}</title>
+    <meta name="description" content="AI-Based Urban Heat Island Analysis, Prediction and Health Alert System for Karnataka, India">
     <!-- Google Fonts: Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Bootstrap 5 CSS (Corrected path) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
-    <!-- FontAwesome for Premium Icons -->
+    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <!-- Custom Style Sheet -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" type="image/jpeg" href="{{ url_for('static', filename='images/logo.jpeg') }}">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
 
-    <!-- Premium Dark Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
-        <div class="container">
-            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
-                <span class="fs-4 fw-bold text-gradient">🔥 HeatSense</span>
+    <!-- Premium Dark Navigation Bar with Orange Accent -->
+    <nav class="navbar navbar-expand-lg navbar-dark shadow-sm">
+        <div class="container-fluid px-3">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('main.dashboard') }}">
+                <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="HeatSense Logo" style="width:32px;height:32px;border-radius:8px;background:white;padding:2px;border:1px solid rgba(249,115,22,0.4);">
+                <span class="fw-bold text-gradient" style="font-size:1.15rem;">HeatSense</span>
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
+
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav me-auto ms-3">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('main.index') }}">Dashboard</a>
+                        <a class="nav-link {% if request.path == '/dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}">
+                            <i class="fa-solid fa-chart-mixed me-1"></i> Dashboard
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/alerts' %}active{% endif %}" href="{{ url_for('main.alerts') }}">Health Alerts</a>
+                        <a class="nav-link {% if request.path == '/alerts' %}active{% endif %}" href="{{ url_for('main.alerts') }}">
+                            <i class="fa-solid fa-bell me-1"></i> Health Alerts
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.location_page') }}">
+                            <i class="fa-solid fa-location-dot me-1"></i> Change Location
+                        </a>
                     </li>
                 </ul>
+
+                <!-- Right side: GEE Status + User -->
+                <div class="d-flex align-items-center gap-3">
+                    <!-- GEE Status Badge (dynamically updated by JS) -->
+                    <span class="gee-badge offline" id="gee-status-badge" title="Google Earth Engine Connection Status">
+                        <span class="dot"></span>
+                        <span id="gee-status-text">GEE Offline</span>
+                    </span>
+
+                    <!-- User info -->
+                    {% if session.get('user') %}
+                    <div class="d-flex align-items-center gap-2">
+                        {% if session.user.photo_url %}
+                        <img src="{{ session.user.photo_url }}" class="user-avatar" alt="User" referrerpolicy="no-referrer">
+                        {% else %}
+                        <div class="user-avatar d-flex align-items-center justify-content-center" style="background:rgba(249,115,22,0.2);font-size:0.8rem;">
+                            👤
+                        </div>
+                        {% endif %}
+                        <span class="user-name d-none d-lg-inline">{{ session.user.display_name }}</span>
+                    </div>
+                    <a href="{{ url_for('main.logout') }}" class="btn btn-outline-light btn-sm" style="font-size:0.75rem;">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </a>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </nav>
 
     <!-- Main Content Area -->
-    <main class="py-4">
+    <main class="flex-grow-1">
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Footer -->
-    <footer class="footer mt-auto py-3 bg-dark text-white-50 border-top border-secondary">
-        <div class="container text-center">
-            <small>&copy; 2026 HeatSense. All rights reserved. | Study Area: Karnataka, India</small>
-        </div>
-    </footer>
-
-    <!-- Bootstrap 5 JavaScript Bundle with Popper -->
+    <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
-    <!-- Custom JavaScript Client script -->
+
+    <!-- GEE Status Check (runs on every page) -->
+    <script>
+        (function checkGEEStatus() {
+            fetch('/api/gee-status')
+                .then(r => r.json())
+                .then(data => {
+                    const badge = document.getElementById('gee-status-badge');
+                    const text  = document.getElementById('gee-status-text');
+                    if (data.connected) {
+                        badge.className = 'gee-badge online';
+                        text.textContent = 'GEE Active';
+                        badge.title = data.message;
+                    } else {
+                        badge.className = 'gee-badge offline';
+                        text.textContent = 'GEE Offline';
+                        badge.title = data.message;
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('gee-status-badge').className = 'gee-badge offline';
+                    document.getElementById('gee-status-text').textContent = 'GEE Offline';
+                });
+        })();
+    </script>
+
+    <!-- Custom JavaScript -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>
