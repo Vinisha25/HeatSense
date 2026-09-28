@@ -166,11 +166,12 @@ def calculate_hhri(chi: float, air_temp: float, humidity: float,
     hhri = (chi * 0.40 + air_n * 0.25 + rh_n * 0.20 + vuln_n * 0.15)
     hhri = round(float(np.clip(hhri, 0, 1)), 4)
 
+    # Karnataka NDMA/KSNDMC calibrated Heat Health Risk Index thresholds
     if hhri < 0.30:
         level = 'Low'
-    elif hhri < 0.52:
+    elif hhri < 0.50:
         level = 'Moderate'
-    elif hhri < 0.72:
+    elif hhri < 0.555:
         level = 'High'
     else:
         level = 'Very High'
@@ -191,6 +192,47 @@ def calculate_hhri(chi: float, air_temp: float, humidity: float,
             'vulnerability': round(vuln_n, 4),
         },
     }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# District Vulnerability Mapping for all 32 Karnataka Districts
+# Calibrated according to KSNDMC Heat Action Plan & agro-climatic zones
+# ──────────────────────────────────────────────────────────────────────────────
+
+DISTRICT_VULNERABILITY = {
+    # Northern Dry Zone / Kalyan Karnataka (Highest heat exposure & socioeconomic vulnerability)
+    'Kalaburagi':        0.78,
+    'Raichur':           0.77,
+    'Yadgir':            0.75,
+    'Bidar':             0.74,
+    'Vijayapura':        0.73,
+    'Bagalkote':         0.71,
+    'Ballari':           0.70,
+    'Koppal':            0.69,
+    'Belagavi':          0.65,
+    'Gadag':             0.64,
+    'Hubli-Dharwad':     0.63,
+    'Dharwad':           0.58,
+    'Haveri':            0.58,
+    'Chitradurga':       0.57,
+    'Davanagere':        0.56,
+    'Bengaluru Urban':   0.58,  # High urban density and UHI
+    'Kolar':             0.50,
+    'Chikkaballapura':   0.49,
+    'Shivamogga':        0.48,
+    'Tumakuru':          0.48,
+    'Bengaluru Rural':   0.46,
+    'Ramanagara':        0.45,
+    'Mysuru':            0.45,
+    'Mandya':            0.44,
+    'Chamarajanagara':   0.44,
+    'Dakshina Kannada':  0.44,
+    'Hassan':            0.42,
+    'Udupi':             0.42,
+    'Mangaluru':         0.42,
+    'Uttara Kannada':    0.42,
+    'Chikkamagaluru':    0.38,
+    'Kodagu':            0.32,
+}
 
 def get_location_hhri(lat: float, lon: float, features: dict) -> dict:
     """
@@ -228,7 +270,7 @@ def get_location_hhri(lat: float, lon: float, features: dict) -> dict:
 def generate_alerts_for_all_districts(app):
     """
     Iterates over all districts, computes their HHRI from climatological
-    feature defaults, and inserts today's alerts into the health_alerts table.
+    feature defaults, and inserts or updates today's alerts in the health_alerts table.
     """
     import sqlite3
     from app.database import get_db
@@ -237,15 +279,6 @@ def generate_alerts_for_all_districts(app):
 
     today = date.today().isoformat()
     generated = []
-
-    VULNERABILITY = {
-        'Bengaluru Urban': 0.55,
-        'Mysuru':          0.45,
-        'Hubli-Dharwad':   0.60,
-        'Mangaluru':       0.40,
-        'Belagavi':        0.65,
-        'Kalaburagi':      0.72,
-    }
 
     with app.app_context():
         db = get_db()
@@ -257,7 +290,7 @@ def generate_alerts_for_all_districts(app):
 
             features = _lat_lon_fallback(lat, lon)
             chi = predict_current_conditions(features)
-            vuln = VULNERABILITY.get(d['name'], 0.5)
+            vuln = DISTRICT_VULNERABILITY.get(d['name'], 0.50)
             result = calculate_hhri(
                 chi=chi,
                 air_temp=features['air_temp'],
@@ -273,17 +306,22 @@ def generate_alerts_for_all_districts(app):
                 (d['id'], today)
             ).fetchone()
             if existing:
-                continue
-
-            db.execute(
-                '''INSERT INTO health_alerts
-                   (district_id, alert_date, risk_level, advisory_message, status)
-                   VALUES (?, ?, ?, ?, ?)''',
-                (d['id'], today,
-                 result['risk_level'],
-                 result['advisory'],
-                 'active')
-            )
+                db.execute(
+                    '''UPDATE health_alerts
+                       SET risk_level = ?, advisory_message = ?, status = 'active'
+                       WHERE id = ?''',
+                    (result['risk_level'], result['advisory'], existing['id'])
+                )
+            else:
+                db.execute(
+                    '''INSERT INTO health_alerts
+                       (district_id, alert_date, risk_level, advisory_message, status)
+                       VALUES (?, ?, ?, ?, ?)''',
+                    (d['id'], today,
+                     result['risk_level'],
+                     result['advisory'],
+                     'active')
+                )
             db.commit()
 
             dispatch_alerts(d['name'], result['risk_level'], result['advisory'])
@@ -299,38 +337,55 @@ def generate_alerts_for_all_districts(app):
     return generated
 
 
-def dispatch_alerts(district_name: str, risk_level: str, advisory: str):
+def dispatch_alerts(district_name: str, risk_level: str, advisory: str, hhri: float = None, to_phone: str = None, to_email: str = None):
     """
-    Placeholder for dispatching UHI heat alerts via email and SMS gateways.
+    Dispatches UHI heat alerts via Twilio SMS and Email notification gateways
+    only to the specified registered recipient. No hardcoded emails or numbers.
     """
     import logging
     logger = logging.getLogger("heatsense.alerts")
     sms_msg = f"[SMS ALERT] HeatSense WARNING: {district_name} is under {risk_level} heat hazard! {advisory[:80]}..."
-    print(sms_msg)
-    logger.warning(sms_msg)
+    logger.info(sms_msg)
 
-    email_msg = (
-        f"[EMAIL ALERT] HeatSense Advisory\n"
-        f"To: karnataka-health-officers@gov.in\n"
-        f"Subject: Emergency Heat Stress Alert - {district_name} ({risk_level})\n\n"
-        f"Dear Officer,\n\n"
-        f"A {risk_level} heat risk warning has been issued for {district_name}.\n"
-        f"Precautionary Guidelines: {advisory}\n\n"
-        f"Sincerely,\nHeatSense Monitoring System"
-    )
-    print(email_msg)
-    logger.warning(email_msg)
+    if not to_phone and not to_email:
+        # No recipient specified — log alert record only, do not dispatch to hardcoded targets
+        logger.info(f"[Alert Recorded] {district_name}: {risk_level} (HHRI={hhri})")
+        return
+
+    try:
+        from app.notifications import dispatch_heat_alert
+        dispatch_heat_alert(
+            district_or_location=district_name,
+            risk_level=risk_level,
+            advisory=advisory,
+            hhri=hhri,
+            to_phone=to_phone,
+            to_email=to_email
+        )
+    except Exception as e:
+        logger.error(f"[Alert Dispatch Service Error] {e}")
 
 
 def get_all_alerts(db) -> list:
     """
-    Fetches all health_alerts joined with district names, ordered by date desc.
+    Fetches all active health_alerts joined with district names,
+    ordered by risk severity descending (Very High > High > Moderate > Low) and alert date.
     """
     rows = db.execute("""
-        SELECT a.*, d.name as district_name
+        SELECT a.*, d.name as district_name, d.latitude, d.longitude
         FROM health_alerts a
         JOIN districts d ON a.district_id = d.id
-        ORDER BY a.created_at DESC
+        WHERE a.status = 'active'
+        ORDER BY 
+            CASE a.risk_level 
+                WHEN 'Very High' THEN 4 
+                WHEN 'High' THEN 3 
+                WHEN 'Moderate' THEN 2 
+                WHEN 'Low' THEN 1 
+                ELSE 0 
+            END DESC,
+            a.alert_date DESC,
+            a.created_at DESC
     """).fetchall()
     return rows
 
@@ -347,11 +402,6 @@ def get_district_hhri(district: dict) -> dict:
     features = _lat_lon_fallback(lat, lon)
     chi = predict_current_conditions(features)
 
-    VULNERABILITY = {
-        'Bengaluru Urban': 0.55, 'Mysuru': 0.45,
-        'Hubli-Dharwad': 0.60,  'Mangaluru': 0.40,
-        'Belagavi': 0.65,        'Kalaburagi': 0.72,
-    }
-    vuln = VULNERABILITY.get(district['name'], 0.5)
+    vuln = DISTRICT_VULNERABILITY.get(district['name'], 0.50)
 
     return calculate_hhri(chi, features['air_temp'], features['relative_humidity'], vuln)

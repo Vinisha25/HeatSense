@@ -146,7 +146,29 @@ def get_live_weather(lat, lon):
         print(f"[Preprocessing] Live weather fetch failed for ({lat}, {lon}): {e}")
     return None
 
-def process_landsat_data(start_date, end_date, region=None):
+def _recent_date_window(lag_days=5, window_days=30):
+    """
+    Returns a (start_date, end_date) string tuple covering the most recent
+    `window_days` days, offset by `lag_days` to account for data availability lag
+    (ERA5-Land typically has a ~5-day delay).
+    """
+    from datetime import datetime, timedelta
+    today = datetime.utcnow()
+    end_dt = today - timedelta(days=lag_days)
+    start_dt = end_dt - timedelta(days=window_days)
+    return start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d')
+
+
+def get_collection_date_range(collection, region=None, label="Dataset"):
+    """
+    Return a sensible recent date range for a GEE ImageCollection.
+    Uses the most recent 30-day window with a 5-day ERA5 availability lag.
+    This avoids scanning the full archive (which causes Windows timestamp overflow
+    for very old Landsat/ERA5 epochs).
+    """
+    return _recent_date_window(lag_days=5, window_days=30)
+
+def process_landsat_data(start_date=None, end_date=None, region=None):
     """
     Ingests Landsat 8 and Landsat 9 imagery over the specified region (or Karnataka),
     masks clouds, scales values, computes median composite, and calculates LST, NDVI, and NDBI indices.
@@ -157,17 +179,18 @@ def process_landsat_data(start_date, end_date, region=None):
     if region is None:
         region = get_karnataka_boundary()
 
+    if start_date is None or end_date is None:
+        start_date, end_date = _recent_date_window(lag_days=5, window_days=30)
+
     l8 = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2') \
         .filterBounds(region) \
         .filterDate(start_date, end_date) \
-        .map(mask_landsat_clouds) \
-        .map(apply_landsat_scaling)
+        .map(mask_landsat_clouds).map(apply_landsat_scaling)
 
     l9 = ee.ImageCollection('LANDSAT/LC09/C02/T1_L2') \
         .filterBounds(region) \
         .filterDate(start_date, end_date) \
-        .map(mask_landsat_clouds) \
-        .map(apply_landsat_scaling)
+        .map(mask_landsat_clouds).map(apply_landsat_scaling)
 
     # Robust median computation with default fallback if date range has no scenes
     collection = l8.merge(l9)
@@ -227,7 +250,7 @@ def get_lulc_data(region=None):
     lulc = ee.Image('ESA/WorldCover/v200/2021').select('Map').unmask(80).clip(region)
     return lulc
 
-def get_era5_land_daily_climate(start_date, end_date, region=None):
+def get_era5_land_daily_climate(start_date=None, end_date=None, region=None):
     """
     Retrieves aggregated daily climate indicators (Air Temperature, Relative Humidity,
     Wind Speed) from ERA5-Land, calculated and clipped to region.
@@ -241,10 +264,11 @@ def get_era5_land_daily_climate(start_date, end_date, region=None):
     # Robust daily aggregate with clean default baseline if collection is empty
     climate_bands = ['temperature_2m', 'u_component_of_wind_10m', 'v_component_of_wind_10m', 'dewpoint_temperature_2m']
     default_era5 = ee.Image.constant([301.65, 2.0, 2.0, 295.15]).rename(climate_bands)
-    collection = ee.ImageCollection('ECMWF/ERA5_LAND/DAILY_AGGR') \
-        .filterBounds(region) \
-        .filterDate(start_date, end_date) \
-        .select(climate_bands)
+    
+    collection_raw = ee.ImageCollection('ECMWF/ERA5_LAND/DAILY_AGGR').filterBounds(region)
+    if start_date is None or end_date is None:
+        start_date, end_date = _recent_date_window(lag_days=5, window_days=30)
+    collection = collection_raw.filterDate(start_date, end_date).select(climate_bands)
 
     mean_climate = ee.Image(ee.Algorithms.If(
         collection.size().gt(0),
@@ -292,11 +316,32 @@ def get_lulc_heat_score(lulc_image):
     score_image = lulc_image.remap(from_classes, to_scores, 0.2).rename('lulc_heat_score')
     return score_image
 
-def calculate_composite_heat_index(start_date, end_date, region=None):
+def get_water_mask(region, lulc=None):
+    """
+    Builds a combined permanent-water mask for the given region using:
+      - ESA WorldCover class 80 (permanent water bodies)
+      - JRC Global Surface Water with >=70% occurrence frequency
+    Returns a binary ee.Image (1 = water, 0 = non-water) unmasked over the region.
+    """
+    import ee
+    if lulc is None:
+        lulc = get_lulc_data(region)
+    esa_water = lulc.eq(80).unmask(0)
+    try:
+        jrc_occ = ee.Image('JRC/GSW1_4/GlobalSurfaceWater').select('occurrence').unmask(0)
+        jrc_water = jrc_occ.gte(70)
+        water_mask = esa_water.Or(jrc_water).unmask(0)
+    except Exception:
+        water_mask = esa_water.unmask(0)
+    return water_mask.clip(region)
+
+
+def calculate_composite_heat_index(start_date=None, end_date=None, region=None):
     """
     Combines normalized LST, Air Temp, NDBI, LULC heat scores, Humidity, NDVI,
     and Wind Speed to produce a multi-factor Composite Heat Index (CHI).
-    Ensures 100% full circular coverage across the entire area of interest.
+    Water pixels (ESA class 80 + JRC GSW >= 70%) are masked transparent so
+    no heat values appear over water bodies.
     """
     import ee
     if region is None:
@@ -331,6 +376,11 @@ def calculate_composite_heat_index(start_date, end_date, region=None):
         .clamp(0.0, 1.0) \
         .clip(region)
 
+    # ── Water mask: make water pixels transparent in the CHI layer ──────────
+    # Water pixels must never receive a heat intensity value or color.
+    water_mask = get_water_mask(region, lulc)
+    chi = chi.updateMask(water_mask.eq(0))
+
     return chi
 
 def classify_heat_hotspots(chi_image, region=None):
@@ -340,18 +390,25 @@ def classify_heat_hotspots(chi_image, region=None):
       1: Moderate (0.35 to <0.55)
       2: High (0.55 to <0.75)
       3: Very High (>=0.75)
-    Ensures 100% full circular coverage across the region.
+    Water pixels are masked transparent so no hazard class is assigned to them.
     """
     import ee
     if region is None:
         region = get_karnataka_boundary()
 
-    classified = ee.Image.constant(0) \
+    # Classify only where the CHI image has valid (non-water) pixels.
+    # ee.Image.constant(0).where(...) fills ALL pixels; instead, start from
+    # the CHI mask itself so water pixels stay transparent.
+    classified = chi_image.multiply(0).int() \
         .where(chi_image.gte(0.35).And(chi_image.lt(0.55)), 1) \
         .where(chi_image.gte(0.55).And(chi_image.lt(0.75)), 2) \
         .where(chi_image.gte(0.75), 3) \
         .rename('hotspots') \
         .clip(region)
+
+    # Belt-and-suspenders: also mask with the water mask
+    water_mask = get_water_mask(region)
+    classified = classified.updateMask(water_mask.eq(0))
 
     return classified
 
@@ -374,14 +431,6 @@ def get_location_features(lat, lon, start_date=None, end_date=None, radius_km=15
         str: 'gee' if GEE data was used, 'climatological' if fallback.
     """
     from datetime import datetime, timedelta
-
-    # Default: most recent 30 days (ERA5-Land has ~5-day data lag)
-    if start_date is None or end_date is None:
-        today = datetime.utcnow()
-        end_dt = today - timedelta(days=5)       # ERA5-Land data availability lag
-        start_dt = end_dt - timedelta(days=30)    # 30-day recent window
-        start_date = start_dt.strftime('%Y-%m-%d')
-        end_date = end_dt.strftime('%Y-%m-%d')
     if _EE_INITIALIZED:
         try:
             import ee

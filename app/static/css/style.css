@@ -509,6 +509,23 @@ p {
 .strategy-card .strategy-name { font-size: 0.88rem; font-weight: 700; margin-bottom: 0.3rem; color: #f8fafc; }
 .strategy-card .strategy-desc { font-size: 0.75rem; color: #cbd5e1; line-height: 1.45; }
 
+/* Light mode overrides for strategy cards */
+body.light-theme .strategy-card {
+    background: #ffffff !important;
+    border-color: var(--border-card) !important;
+}
+body.light-theme .strategy-card .strategy-name {
+    color: var(--text-main) !important;
+}
+body.light-theme .strategy-card .strategy-desc {
+    color: var(--text-muted) !important;
+}
+body.light-theme .strategy-card.selected {
+    border-color: var(--orange) !important;
+    box-shadow: 0 0 0 1px var(--orange), var(--shadow-orange) !important;
+    background: rgba(249, 115, 22, 0.05) !important;
+}
+
 /* ── Premium Buttons ────────────────────────────────────────────────────── */
 .btn-primary {
     background: var(--primary-gradient) !important;
@@ -720,22 +737,21 @@ p {
     .map-frame-container { height: 350px; }
 }
 
-/* ── Plotly Dark Theme Overrides ─────────────────────────────────────── */
-.js-plotly-plot .plotly .main-svg,
-.js-plotly-plot .plotly .bg,
-.js-plotly-plot .plotly .plotbg,
-.js-plotly-plot .plotly rect.bg {
+/* ── Plotly Dark Theme Overrides (Only in dark mode) ──────────────────── */
+body:not(.light-theme) .js-plotly-plot .plotly .main-svg,
+body:not(.light-theme) .js-plotly-plot .plotly .bg,
+body:not(.light-theme) .js-plotly-plot .plotly .plotbg,
+body:not(.light-theme) .js-plotly-plot .plotly rect.bg {
     fill: transparent !important;
     background: transparent !important;
 }
 
-/* Ensure all default dark-blue Plotly text is converted to readable light theme colors */
-.js-plotly-plot .plotly text[style*="rgb(42, 63, 95)"],
-.js-plotly-plot .plotly text[style*="rgb(42,63,95)"] {
+body:not(.light-theme) .js-plotly-plot .plotly text[style*="rgb(42, 63, 95)"],
+body:not(.light-theme) .js-plotly-plot .plotly text[style*="rgb(42,63,95)"] {
     fill: #cbd5e1 !important;
 }
-.js-plotly-plot .plotly text.gtitle[style*="rgb(42, 63, 95)"],
-.js-plotly-plot .plotly text.gtitle[style*="rgb(42,63,95)"] {
+body:not(.light-theme) .js-plotly-plot .plotly text.gtitle[style*="rgb(42, 63, 95)"],
+body:not(.light-theme) .js-plotly-plot .plotly text.gtitle[style*="rgb(42,63,95)"] {
     fill: #f8fafc !important;
 }
 
@@ -743,3 +759,378 @@ p {
     .stat-value { font-size: 1.2rem; }
     .filter-bar .row { gap: 0.5rem; }
 }
+
+
+/* ── Light Theme Overrides ─────────────────────────────────────────────────── */
+body.light-theme {
+    --bg-main:         #f0f4f8;
+    --bg-sidebar:      #ffffff;
+    --bg-card:         #ffffff;
+    --bg-card-hover:   #f1f5f9;
+    --border-card:     #cbd5e1;
+    --text-main:       #0f172a;
+    --text-secondary:  #1e293b;
+    --text-muted:      #475569;
+    --text-dim:        #64748b;
+    --shadow-card:     0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-hover:    0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* ── Body and layout ── */
+body.light-theme {
+    background-color: var(--bg-main) !important;
+    color: var(--text-main) !important;
+}
+
+body.light-theme .dashboard-wrapper {
+    background-color: var(--bg-main);
+}
+
+body.light-theme .main-content {
+    background-color: var(--bg-main);
+}
+
+/* ── Sidebar ── */
+body.light-theme .sidebar {
+    background-color: var(--bg-sidebar) !important;
+    border-right: 1px solid var(--border-card) !important;
+}
+
+body.light-theme .sidebar .nav-link {
+    color: #334155 !important;
+}
+
+body.light-theme .sidebar .nav-link:hover,
+body.light-theme .sidebar .nav-link.active {
+    background: rgba(249, 115, 22, 0.1) !important;
+    color: var(--orange) !important;
+}
+
+body.light-theme .sidebar .nav-link i {
+    color: inherit !important;
+}
+
+/* ── Navbar ── */
+body.light-theme .navbar {
+    background: #ffffff !important;
+    border-bottom: 1px solid var(--border-card) !important;
+}
+
+body.light-theme .navbar .nav-link,
+body.light-theme .navbar-brand span {
+    color: #1e293b !important;
+}
+
+/* ── Cards ── */
+body.light-theme .card,
+body.light-theme .stat-card,
+body.light-theme .metric-card,
+body.light-theme .age-card {
+    background: #ffffff !important;
+    border-color: var(--border-card) !important;
+    color: var(--text-main) !important;
+}
+
+/* Age-card variants — override dark gradient → soft tinted light backgrounds */
+body.light-theme .age-card.children  { background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(241,245,249,0.95))  !important; border-color: rgba(59,130,246,0.25) !important; }
+body.light-theme .age-card.adults    { background: linear-gradient(135deg, rgba(249,115,22,0.08), rgba(241,245,249,0.95))  !important; border-color: rgba(249,115,22,0.25) !important; }
+body.light-theme .age-card.elderly   { background: linear-gradient(135deg, rgba(239,68,68,0.08),  rgba(241,245,249,0.95))  !important; border-color: rgba(239,68,68,0.25)  !important; }
+body.light-theme .age-card.workers   { background: linear-gradient(135deg, rgba(234,179,8,0.08),  rgba(241,245,249,0.95))  !important; border-color: rgba(234,179,8,0.25)  !important; }
+body.light-theme .age-card.pregnant  { background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(241,245,249,0.95))  !important; border-color: rgba(139,92,246,0.25) !important; }
+body.light-theme .age-card.general   { background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(241,245,249,0.95))  !important; border-color: rgba(16,185,129,0.25) !important; }
+
+/* Age-card text colours in light mode */
+body.light-theme .age-card .age-title {
+    color: var(--text-main) !important;
+}
+body.light-theme .age-card .precaution-list li {
+    color: var(--text-muted) !important;
+}
+
+body.light-theme .card-header {
+    background-color: #f8fafc !important;
+    border-bottom: 1px solid var(--border-card) !important;
+    color: var(--text-main) !important;
+}
+
+body.light-theme .card-body {
+    color: var(--text-main) !important;
+}
+
+/* ── Text overrides — target light-on-dark inline colours ── */
+body.light-theme .text-light,
+body.light-theme .text-white,
+body.light-theme h1, body.light-theme h2,
+body.light-theme h3, body.light-theme h4,
+body.light-theme h5, body.light-theme h6,
+body.light-theme p, body.light-theme label,
+body.light-theme .stat-label,
+body.light-theme .section-header h4 {
+    color: var(--text-main) !important;
+}
+
+body.light-theme .text-muted,
+body.light-theme .text-white-50 {
+    color: var(--text-muted) !important;
+}
+
+/* Override inline styles set by JS */
+body.light-theme [style*="color:#f1f5f9"],
+body.light-theme [style*="color: #f1f5f9"],
+body.light-theme [style*="color:#e2e8f0"],
+body.light-theme [style*="color: #e2e8f0"],
+body.light-theme [style*="color:#f8fafc"],
+body.light-theme [style*="color: #f8fafc"],
+body.light-theme [style*="color:white"],
+body.light-theme [style*="color: white"] {
+    color: var(--text-main) !important;
+}
+
+body.light-theme [style*="color:#cbd5e1"],
+body.light-theme [style*="color: #cbd5e1"],
+body.light-theme [style*="color:#94a3b8"],
+body.light-theme [style*="color: #94a3b8"],
+body.light-theme [style*="color:#64748b"],
+body.light-theme [style*="color: #64748b"] {
+    color: var(--text-muted) !important;
+}
+
+/* ── Alert toasts (History cards & Leaderboard cards) ── */
+body.light-theme .alert-toast {
+    background: #f8fafc !important;
+    border-color: var(--border-card) !important;
+    color: var(--text-main) !important;
+}
+
+/* ── Section header ── */
+body.light-theme .section-header {
+    color: var(--text-main) !important;
+}
+
+/* ── Stat value ── */
+body.light-theme .stat-value {
+    color: var(--text-main) !important;
+}
+
+/* ── Backgrounds ── */
+body.light-theme .bg-dark {
+    background-color: #ffffff !important;
+    color: var(--text-main) !important;
+}
+
+/* ── Badges ── */
+body.light-theme .badge.bg-secondary {
+    background-color: #e2e8f0 !important;
+    color: #1e293b !important;
+}
+
+/* ── Forms ── */
+body.light-theme .form-select,
+body.light-theme .form-control,
+body.light-theme .form-control-plaintext {
+    background-color: #ffffff !important;
+    color: var(--text-main) !important;
+    border-color: var(--border-card) !important;
+}
+
+body.light-theme .border-secondary {
+    border-color: var(--border-card) !important;
+}
+
+/* ── Loading spinner area ── */
+body.light-theme .loading-overlay {
+    background: rgba(255, 255, 255, 0.85) !important;
+    color: var(--text-muted) !important;
+}
+
+body.light-theme .loading-overlay span {
+    color: var(--text-muted) !important;
+}
+
+/* ── Light Mode Plotly Graphs (All SVG Texts & Lines) ─────────────────── */
+body.light-theme .js-plotly-plot .plotly .main-svg,
+body.light-theme .js-plotly-plot .plotly .bg,
+body.light-theme .js-plotly-plot .plotly .plotbg,
+body.light-theme .js-plotly-plot .plotly rect.bg {
+    fill: transparent !important;
+    background: transparent !important;
+}
+
+/* Force all text in Plotly graphs to high-contrast dark colors in Light Mode */
+body.light-theme .js-plotly-plot text,
+body.light-theme .js-plotly-plot .plotly text,
+body.light-theme .js-plotly-plot .plotly text.gtitle,
+body.light-theme .js-plotly-plot .plotly text.xtitle,
+body.light-theme .js-plotly-plot .plotly text.ytitle,
+body.light-theme .js-plotly-plot .plotly text.title,
+body.light-theme .js-plotly-plot .plotly .xtick text,
+body.light-theme .js-plotly-plot .plotly .ytick text,
+body.light-theme .js-plotly-plot .plotly .legendtext,
+body.light-theme .js-plotly-plot .plotly .annotation-text,
+body.light-theme .js-plotly-plot .plotly .polartitle,
+body.light-theme .js-plotly-plot .plotly .angularaxis-tick text,
+body.light-theme .js-plotly-plot .plotly .radialaxis-tick text,
+body.light-theme .js-plotly-plot .plotly text.slicetext,
+body.light-theme .js-plotly-plot .plotly .slicetext text,
+body.light-theme .js-plotly-plot .plotly text.bartext,
+body.light-theme .js-plotly-plot .plotly .indicator text,
+body.light-theme .js-plotly-plot .plotly text.indicator-num,
+body.light-theme .js-plotly-plot .plotly text.indicator-delta,
+body.light-theme .js-plotly-plot .plotly text.indicator-title,
+body.light-theme .js-plotly-plot .plotly .gauge text,
+body.light-theme .js-plotly-plot .plotly .g-title text {
+    fill: #0f172a !important;
+    color: #0f172a !important;
+}
+
+/* Target all white, off-white, and pale gray fills inside Plotly SVG in Light Mode */
+body.light-theme .js-plotly-plot text[style*="rgb(241, 245, 249)"],
+body.light-theme .js-plotly-plot text[style*="rgb(248, 250, 252)"],
+body.light-theme .js-plotly-plot text[style*="rgb(203, 213, 225)"],
+body.light-theme .js-plotly-plot text[style*="rgb(226, 232, 240)"],
+body.light-theme .js-plotly-plot text[style*="rgb(148, 163, 184)"],
+body.light-theme .js-plotly-plot text[style*="rgb(255, 255, 255)"],
+body.light-theme .js-plotly-plot text[style*="fill: #cbd5e1"],
+body.light-theme .js-plotly-plot text[style*="fill: #f8fafc"],
+body.light-theme .js-plotly-plot text[style*="fill: #e2e8f0"],
+body.light-theme .js-plotly-plot text[style*="fill: #f1f5f9"],
+body.light-theme .js-plotly-plot text[style*="fill: white"],
+body.light-theme .js-plotly-plot text[style*="fill:white"],
+body.light-theme .js-plotly-plot text[style*="fill:#cbd5e1"],
+body.light-theme .js-plotly-plot text[style*="fill:#f8fafc"],
+body.light-theme .js-plotly-plot text[style*="fill:#e2e8f0"],
+body.light-theme .js-plotly-plot text[style*="fill:#f1f5f9"],
+body.light-theme .js-plotly-plot text[style*="fill:#ffffff"],
+body.light-theme .js-plotly-plot text[fill="#cbd5e1"],
+body.light-theme .js-plotly-plot text[fill="#f8fafc"],
+body.light-theme .js-plotly-plot text[fill="#e2e8f0"],
+body.light-theme .js-plotly-plot text[fill="#f1f5f9"],
+body.light-theme .js-plotly-plot text[fill="white"],
+body.light-theme .js-plotly-plot text[fill="#ffffff"] {
+    fill: #0f172a !important;
+}
+
+/* Light mode grid lines and axes in Plotly */
+body.light-theme .js-plotly-plot .plotly .gridpath,
+body.light-theme .js-plotly-plot .plotly .ygrid,
+body.light-theme .js-plotly-plot .plotly .xgrid {
+    stroke: rgba(0, 0, 0, 0.08) !important;
+}
+body.light-theme .js-plotly-plot .plotly .zerolinelayer path,
+body.light-theme .js-plotly-plot .plotly .crisp,
+body.light-theme .js-plotly-plot .plotly .angularaxis path,
+body.light-theme .js-plotly-plot .plotly .radialaxis path {
+    stroke: rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Radar polar background in light mode */
+body.light-theme .js-plotly-plot .plotly .polarlayer .angularaxis-background {
+    fill: rgba(241, 245, 249, 0.7) !important;
+}
+
+/* Modebar icons in light mode */
+body.light-theme .js-plotly-plot .plotly .modebar-btn svg path {
+    fill: #64748b !important;
+}
+body.light-theme .js-plotly-plot .plotly .modebar-btn:hover svg path,
+body.light-theme .js-plotly-plot .plotly .modebar-btn.active svg path {
+    fill: #0f172a !important;
+}
+
+/* Table charts inside Plotly */
+body.light-theme .js-plotly-plot .plotly .table .header text,
+body.light-theme .js-plotly-plot .plotly .table .cell text {
+    fill: #0f172a !important;
+}
+
+/* ── Light Mode General Components & Typography ───────────────────────── */
+body.light-theme table,
+body.light-theme th,
+body.light-theme td {
+    color: var(--text-main) !important;
+    border-color: var(--border-card) !important;
+}
+
+body.light-theme .table-dark {
+    background-color: #ffffff !important;
+    color: var(--text-main) !important;
+}
+
+body.light-theme .stat-sub {
+    color: var(--text-muted) !important;
+}
+
+body.light-theme .stat-sub span {
+    color: var(--orange) !important;
+}
+
+body.light-theme .factor-card {
+    background: #ffffff !important;
+    border: 1px solid var(--border-card) !important;
+    color: var(--text-main) !important;
+}
+
+body.light-theme .factor-label {
+    color: var(--text-main) !important;
+    font-weight: 600;
+}
+
+body.light-theme .factor-desc {
+    color: var(--text-muted) !important;
+}
+
+body.light-theme .alert-toast {
+    background: #ffffff !important;
+    border-color: var(--border-card) !important;
+    color: var(--text-main) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+body.light-theme .alert-toast strong,
+body.light-theme .alert-toast h6 {
+    color: var(--text-main) !important;
+}
+
+body.light-theme .alert-toast div,
+body.light-theme .alert-toast span {
+    color: var(--text-muted) !important;
+}
+
+body.light-theme .alert-toast .badge {
+    color: #ffffff !important;
+}
+
+body.light-theme .badge.bg-dark-subtle,
+body.light-theme .badge.bg-secondary-subtle {
+    background-color: #e2e8f0 !important;
+    color: #1e293b !important;
+    border: 1px solid #cbd5e1 !important;
+}
+
+body.light-theme span[style*="background:rgba(255,255,255,0.1)"] {
+    background: rgba(0, 0, 0, 0.08) !important;
+    color: #0f172a !important;
+}
+
+body.light-theme [style*="color:#f1f5f9"],
+body.light-theme [style*="color: #f1f5f9"],
+body.light-theme [style*="color:#f8fafc"],
+body.light-theme [style*="color: #f8fafc"] {
+    color: var(--text-main) !important;
+}
+
+body.light-theme [style*="color:#cbd5e1"],
+body.light-theme [style*="color: #cbd5e1"],
+body.light-theme [style*="color:#94a3b8"],
+body.light-theme [style*="color: #94a3b8"],
+body.light-theme [style*="color:#64748b"],
+body.light-theme [style*="color: #64748b"] {
+    color: var(--text-muted) !important;
+}
+
+body.light-theme .leaflet-popup-content-wrapper,
+body.light-theme .leaflet-popup-tip {
+    background: #ffffff !important;
+    color: #0f172a !important;
+}
+

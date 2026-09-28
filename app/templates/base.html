@@ -17,11 +17,29 @@
     <script src="{{ url_for('static', filename='js/plotly-2.27.0.min.js') }}"></script>
     <script>if (typeof Plotly === 'undefined') { document.write('<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"><\/script>'); }</script>
     <!-- Custom Style Sheet -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=7">
     <link rel="icon" type="image/jpeg" href="{{ url_for('static', filename='images/logo.jpeg') }}">
+    
+    <!-- Google Translate Script (Hidden) -->
+    <script>
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+    </script>
+    <script src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+    <style>
+        #google_translate_element { display: none; }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+    </style>
+    
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+    <div id="google_translate_element"></div>
 
     <!-- Premium Dark Navigation Bar with Orange Accent -->
     <nav class="navbar navbar-expand-lg navbar-dark shadow-sm">
@@ -72,7 +90,7 @@
                             👤
                         </div>
                         {% endif %}
-                        <span class="user-name d-none d-lg-inline">{{ session.user.display_name }}</span>
+                        <span class="user-name d-none d-lg-inline" id="navbar-user-name">{{ session.user.display_name }}</span>
                     </div>
                     <a href="{{ url_for('main.logout') }}" class="btn btn-outline-light btn-sm" style="font-size:0.75rem;">
                         <i class="fa-solid fa-right-from-bracket"></i>
@@ -116,8 +134,33 @@
         })();
     </script>
 
+    <!-- Firebase SDK (Compat Version: App, Auth, Firestore) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script>
+        window.firebaseConfig = {
+            apiKey: "{{ config.FIREBASE_API_KEY }}",
+            authDomain: "{{ config.FIREBASE_AUTH_DOMAIN }}",
+            projectId: "{{ config.FIREBASE_PROJECT_ID }}",
+            storageBucket: "{{ config.FIREBASE_STORAGE_BUCKET }}",
+            messagingSenderId: "{{ config.FIREBASE_MESSAGING_SENDER_ID }}",
+            appId: "{{ config.FIREBASE_APP_ID }}",
+            measurementId: "{{ config.FIREBASE_MEASUREMENT_ID }}"
+        };
+        if (window.firebaseConfig.apiKey && typeof firebase !== 'undefined' && !firebase.apps.length) {
+            try {
+                firebase.initializeApp(window.firebaseConfig);
+                window.firebaseDb = firebase.firestore();
+                console.log("[Firebase] Initialized successfully for project:", window.firebaseConfig.projectId);
+            } catch (err) {
+                console.warn("[Firebase] Initialization notice:", err);
+            }
+        }
+    </script>
+
     <!-- Custom JavaScript -->
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=6"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -24,6 +24,34 @@ def _require_session():
     """Check if user is authenticated in the session."""
     return session.get('user') is not None
 
+def _get_logged_in_user_record():
+    """
+    Retrieves the currently logged-in user's record (id, full_name, email, phone_number)
+    EXCLUSIVELY from the existing database using the session's user ID.
+    Returns (user_row, settings_row).
+    """
+    if not _require_session():
+        return None, None
+    user_sess = session.get('user') or {}
+    user_id = user_sess.get('id')
+    if not user_id:
+        return None, None
+
+    db = get_db()
+    user_row = db.execute(
+        "SELECT id, full_name, email, phone_number, is_admin FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+    if not user_row:
+        return None, None
+
+    settings_row = db.execute(
+        "SELECT email_alerts, sms_alerts, theme, language FROM user_settings WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+
+    return user_row, settings_row
+
 def _is_valid_email(email):
     """Validate email format for any valid domain."""
     pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
@@ -127,7 +155,23 @@ def dashboard():
 
     db = get_db()
     districts = db.execute("SELECT * FROM districts").fetchall()
-    user = session.get('user') or {'display_name': 'Guest', 'email': '', 'photo_url': ''}
+    user = session.get('user') or {'display_name': 'Guest', 'email': '', 'phone_number': ''}
+
+    # Always refresh profile from DB so edits persist across refreshes
+    if user and user.get('id'):
+        db_user = db.execute("SELECT full_name, email, phone_number, is_admin FROM users WHERE id = ?", (user['id'],)).fetchone()
+        if db_user:
+            user = dict(user)
+            user['display_name'] = db_user['full_name'] or user.get('display_name', '')
+            user['email'] = db_user['email'] or user.get('email', '')
+            user['phone_number'] = db_user['phone_number'] or ''
+            user['is_admin'] = bool(db_user['is_admin']) if db_user['is_admin'] is not None else False
+            session['user'] = user
+
+    # Ensure phone_number key always exists
+    if 'phone_number' not in user:
+        user = dict(user)
+        user['phone_number'] = ''
 
     return render_template(
         'index.html',
@@ -165,14 +209,22 @@ def alerts():
         except Exception as e:
             print(f"[Alerts] HHRI calc failed for {d['name']}: {e}")
 
+    # Sort by HHRI descending so highest-risk districts appear first
+    RISK_ORDER = {'Very High': 4, 'High': 3, 'Moderate': 2, 'Low': 1}
+    district_risk_cards.sort(key=lambda c: (RISK_ORDER.get(c['risk_level'], 0), c['hhri']), reverse=True)
+
     tier_counts = {'Low': 0, 'Moderate': 0, 'High': 0, 'Very High': 0}
     for card in district_risk_cards:
         tier_counts[card['risk_level']] = tier_counts.get(card['risk_level'], 0) + 1
+
+    # Top high-risk districts for the System Alerts panel (Very High first, then High, then Moderate)
+    top_risk_districts = [c for c in district_risk_cards if c['risk_level'] in ('Very High', 'High', 'Moderate')]
 
     return render_template(
         'alerts.html',
         alerts=alerts_list,
         district_risk_cards=district_risk_cards,
+        top_risk_districts=top_risk_districts,
         tier_counts=tier_counts,
         risk_tiers=RISK_TIERS,
     )
@@ -274,11 +326,13 @@ def api_auth_login():
 
     # Establish session
     session.clear()
+    is_admin = bool(user['is_admin']) if 'is_admin' in user.keys() else False
     session['user'] = {
         'id':           user['id'],
         'display_name': user['full_name'],
         'email':        user['email'],
         'phone_number': user['phone_number'],
+        'is_admin':     is_admin,
     }
     session.permanent = True
 
@@ -331,6 +385,17 @@ def api_geocode():
         # Determine the most accurate primary name
         primary = raw_title or amenity or road or locality or city or f"{lat:.5f}, {lon:.5f}"
 
+        # Regional GIS boundary correction:
+        # St Joseph Engineering College is officially in Vamanjoor (575028),
+        # but OpenStreetMap's administrative boundary polygon maps the campus to Kulashekara.
+        if (
+            "saint joseph's engineering college" in (primary or "").lower() or
+            "st joseph" in (primary or "").lower() or
+            (12.909 <= lat <= 12.916 and 74.895 <= lon <= 74.903)
+        ):
+            if locality in ("Kulashekara", "Kudupu", None, ""):
+                locality = "Vamanjoor"
+
         # Build clean contextual name (e.g. "Urva Market, Mangaluru" or "Kuloor Ferry Road, Urva, Mangaluru")
         parts = [primary]
         if locality and locality != primary and locality != city:
@@ -349,6 +414,10 @@ def api_geocode():
         p_type  = data.get('type', 'place').capitalize()
         level   = data.get('addresstype', 'Location').capitalize()
 
+        raw_display = data.get('display_name', display_short)
+        if locality == "Vamanjoor" and "Kulashekara" in raw_display:
+            raw_display = raw_display.replace("Kulashekara", "Vamanjoor")
+
         if full == '1':
             return jsonify({
                 'name':         display_short,
@@ -361,7 +430,7 @@ def api_geocode():
                 'postcode':     addr.get('postcode', ''),
                 'type':         p_type,
                 'level':        level,
-                'display_name': data.get('display_name', display_short),
+                'display_name': raw_display,
                 'lat':          lat,
                 'lon':          lon,
             })
@@ -452,6 +521,13 @@ def api_search_location():
             city     = addr.get('city') or addr.get('county') or addr.get('state_district')
 
             primary = raw_name or amenity or road or locality or city or r.get('display_name', '')
+            if (
+                "saint joseph" in primary.lower() or
+                (12.909 <= lat_f <= 12.916 and 74.895 <= lon_f <= 74.903)
+            ):
+                if locality in ("Kulashekara", "Kudupu", None, ""):
+                    locality = "Vamanjoor"
+
             parts = [primary]
             if locality and locality != primary and locality != city:
                 parts.append(locality)
@@ -459,10 +535,13 @@ def api_search_location():
                 parts.append(city)
 
             name = ", ".join(parts)
+            display_name = r.get('display_name', '')
+            if locality == "Vamanjoor" and "Kulashekara" in display_name:
+                display_name = display_name.replace("Kulashekara", "Vamanjoor")
 
             out.append({
                 'name':         name,
-                'display_name': r.get('display_name', ''),
+                'display_name': display_name,
                 'lat':          float(r['lat']),
                 'lon':          float(r['lon']),
                 'type':         r.get('type', 'place'),
@@ -498,6 +577,8 @@ def api_analyze_location():
     ).fetchone()
 
     if existing:
+        db.execute("UPDATE locations SET radius_km = ? WHERE id = ?", (radius_km, existing['id']))
+        db.commit()
         return jsonify({'location_id': existing['id'], 'name': name})
 
     # Insert new location
@@ -532,8 +613,8 @@ def api_map_layers():
     Renders and serves the interactive map HTML.
     Accepts lat/lon for any location, falls back to Karnataka center.
     """
-    start_date = request.args.get('start_date', '2024-03-01')
-    end_date   = request.args.get('end_date', '2024-05-31')
+    start_date = request.args.get('start_date', None)
+    end_date   = request.args.get('end_date', None)
     lat        = request.args.get('lat', 14.5, type=float)
     lon        = request.args.get('lon', 75.7, type=float)
     radius_km  = request.args.get('radius', 15, type=float)
@@ -1063,6 +1144,38 @@ def api_health_risk():
 
     hhri_result = get_location_hhri(lat, lon, features)
     chi = predict_current_conditions(features)
+    risk_level = hhri_result.get('risk_level', 'Moderate')
+    temp = None
+    if isinstance(features, dict):
+        temp = features.get('air_temperature') or features.get('LST')
+    elif hasattr(features, '__getitem__'):
+        try:
+            temp = features['air_temperature']
+        except Exception:
+            pass
+
+    # When High or Severe risk is detected, check if auto notification is requested
+    notification_result = None
+    high_risk_detected = risk_level in ('High', 'Very High', 'Severe')
+    if high_risk_detected and request.args.get('auto_notify') == '1':
+        user_row, settings_row = _get_logged_in_user_record()
+        if user_row:
+            from app.notifications import dispatch_heat_alert
+            email_enabled = bool(settings_row['email_alerts']) if settings_row and settings_row['email_alerts'] is not None else True
+            sms_enabled = bool(settings_row['sms_alerts']) if settings_row and settings_row['sms_alerts'] is not None else True
+            notification_result = dispatch_heat_alert(
+                district_or_location=location_name,
+                risk_level=risk_level,
+                advisory=hhri_result.get('advisory', ''),
+                hhri=hhri_result.get('hhri'),
+                chi=chi,
+                temperature=temp,
+                to_phone=user_row['phone_number'],
+                to_email=user_row['email'],
+                sms_enabled=sms_enabled,
+                email_enabled=email_enabled,
+                is_test=False,
+            )
 
     return jsonify({
         'location':         location_name,
@@ -1071,13 +1184,16 @@ def api_health_risk():
         'data_source':      source,
         'chi':              chi,
         'hhri':             hhri_result['hhri'],
-        'risk_level':       hhri_result['risk_level'],
+        'risk_level':       risk_level,
         'risk_icon':        hhri_result['risk_icon'],
         'badge_bg':         hhri_result['badge_bg'],
         'advisory':         hhri_result['advisory'],
         'action':           hhri_result['action'],
         'components':       hhri_result['components'],
         'age_precautions':  hhri_result['age_precautions'],
+        'temperature':      round(temp, 1) if temp is not None else None,
+        'high_risk_detected': high_risk_detected,
+        'notification_sent': notification_result,
         'emergency_contacts': [
             {'label': 'Arogya Sahayavani', 'number': '104'},
             {'label': 'Ambulance',          'number': '108'},
@@ -1085,6 +1201,150 @@ def api_health_risk():
             {'label': 'BBMP Heat Helpline', 'number': '080-22221188'},
         ],
     })
+
+
+@main_bp.route('/api/alerts/dispatch', methods=['POST'])
+def api_alerts_dispatch():
+    """
+    Dispatch HeatSense alerts via Twilio SMS and Twilio SendGrid email.
+    The recipient is STRICTLY the currently logged-in user, retrieved directly
+    from the existing SQLite database using their active session ID.
+    Does NOT send to other registered users, hardcoded numbers, or hardcoded emails.
+    Respects user's Email and SMS notification settings.
+    """
+    user_row, settings_row = _get_logged_in_user_record()
+    if not user_row:
+        return jsonify({'success': False, 'error': 'You must be logged in to dispatch alerts.'}), 401
+
+    recipient_name = user_row['full_name']
+    recipient_email = (user_row['email'] or '').strip()
+    recipient_phone = (user_row['phone_number'] or '').strip()
+
+    email_enabled = bool(settings_row['email_alerts']) if settings_row and settings_row['email_alerts'] is not None else True
+    sms_enabled = bool(settings_row['sms_alerts']) if settings_row and settings_row['sms_alerts'] is not None else True
+
+    body = request.get_json() or {}
+    is_custom = body.get('custom', False)
+
+    from app.notifications import dispatch_heat_alert, send_custom_alert
+
+    if is_custom:
+        custom_sms = body.get('custom_sms', '').strip()
+        custom_subject = body.get('custom_subject', '').strip() or '🌡️ HeatSense Alert'
+        custom_email_body = body.get('custom_email_body', '').strip()
+
+        results = send_custom_alert(
+            sms_text=custom_sms,
+            email_subject=custom_subject,
+            email_body=custom_email_body,
+            to_phone=recipient_phone,
+            to_email=recipient_email,
+            sms_enabled=sms_enabled,
+            email_enabled=email_enabled,
+        )
+    else:
+        location = body.get('location', 'Bengaluru Urban')
+        risk_level = body.get('risk_level', 'High')
+        advisory = body.get('advisory', 'High heat stress detected. Take precautionary cooling measures.')
+        hhri = body.get('hhri')
+        chi = body.get('chi')
+        temperature = body.get('temperature')
+        precautions = body.get('precautions')
+
+        results = dispatch_heat_alert(
+            district_or_location=location,
+            risk_level=risk_level,
+            advisory=advisory,
+            hhri=float(hhri) if hhri is not None else None,
+            chi=float(chi) if chi is not None else None,
+            temperature=float(temperature) if temperature is not None else None,
+            precautions=precautions,
+            to_phone=recipient_phone,
+            to_email=recipient_email,
+            sms_enabled=sms_enabled,
+            email_enabled=email_enabled,
+            is_test=False,
+        )
+
+    return jsonify({
+        'success': True,
+        'recipient_user': recipient_name,
+        'recipient_phone': recipient_phone,
+        'recipient_email': recipient_email,
+        'sms_enabled': sms_enabled,
+        'email_enabled': email_enabled,
+        'results': results,
+    })
+
+
+@main_bp.route('/api/alerts/test', methods=['POST'])
+def api_alerts_test():
+    """
+    Send Test Notification button handler.
+    Sends a test heat alert ONLY to the currently logged-in user's registered
+    email and phone number retrieved from the existing database.
+    Does NOT send to other registered users or hardcoded numbers/emails.
+    Respects the user's Email and SMS notification settings.
+    """
+    user_row, settings_row = _get_logged_in_user_record()
+    if not user_row:
+        return jsonify({'success': False, 'error': 'You must be logged in to send a test notification.'}), 401
+
+    recipient_name = user_row['full_name']
+    recipient_email = (user_row['email'] or '').strip()
+    recipient_phone = (user_row['phone_number'] or '').strip()
+
+    email_enabled = bool(settings_row['email_alerts']) if settings_row and settings_row['email_alerts'] is not None else True
+    sms_enabled = bool(settings_row['sms_alerts']) if settings_row and settings_row['sms_alerts'] is not None else True
+
+    # Use actual current HeatSense features or request params
+    body = request.get_json() or {}
+    location_name = body.get('location') or 'Bengaluru Urban'
+    lat = body.get('lat', 12.9716)
+    lon = body.get('lon', 77.5946)
+
+    from app.preprocessing import get_location_features, _lat_lon_fallback
+    from app.health_risk import get_location_hhri
+    from app.ml import predict_current_conditions
+    from app.notifications import dispatch_heat_alert
+
+    try:
+        features, source = get_location_features(lat, lon, radius_km=15)
+        if features is None:
+            features = _lat_lon_fallback(lat, lon)
+    except Exception:
+        features = _lat_lon_fallback(lat, lon)
+
+    hhri_result = get_location_hhri(lat, lon, features)
+    chi = predict_current_conditions(features)
+    temp = features.get('air_temperature', 35.8)
+
+    results = dispatch_heat_alert(
+        district_or_location=location_name,
+        risk_level=hhri_result.get('risk_level', 'High'),
+        advisory=hhri_result.get('advisory', 'HeatSense test advisory: elevated thermal conditions observed. Stay hydrated and monitor regional updates.'),
+        hhri=hhri_result.get('hhri', 0.725),
+        chi=chi,
+        temperature=temp,
+        to_phone=recipient_phone,
+        to_email=recipient_email,
+        sms_enabled=sms_enabled,
+        email_enabled=email_enabled,
+        is_test=True,
+    )
+
+    return jsonify({
+        'success': True,
+        'message': f"Test alert dispatched to registered account: {recipient_name}",
+        'recipient_user': recipient_name,
+        'recipient_phone': recipient_phone,
+        'recipient_email': recipient_email,
+        'sms_enabled': sms_enabled,
+        'email_enabled': email_enabled,
+        'results': results,
+    })
+
+
 
 
 @main_bp.route('/api/mitigation', methods=['POST'])
@@ -1167,18 +1427,36 @@ def api_before_after_maps():
 
 @main_bp.route('/api/alerts')
 def api_alerts_json():
-    """JSON API endpoint to fetch seeded health alerts from the database."""
-    from app.health_risk import get_all_alerts
+    """JSON API endpoint returning Karnataka districts ranked by highest heat health risk."""
+    from app.health_risk import get_district_hhri
+    from datetime import date
     db = get_db()
-    alerts_list = get_all_alerts(db)
-    result = [{
-        "id":               a["id"],
-        "alert_date":       a["alert_date"],
-        "risk_level":       a["risk_level"],
-        "advisory_message": a["advisory_message"],
-        "status":           a["status"],
-        "district_name":    a["district_name"],
-    } for a in alerts_list]
+    districts = db.execute('SELECT * FROM districts').fetchall()
+    today_str = date.today().isoformat()
+
+    result = []
+    for d in districts:
+        try:
+            hhri_res = get_district_hhri(dict(d))
+            result.append({
+                "id":               d["id"],
+                "district_name":    d["name"],
+                "risk_level":       hhri_res["risk_level"],
+                "hhri":             hhri_res["hhri"],
+                "chi":              hhri_res["components"]["chi"],
+                "risk_icon":        hhri_res["risk_icon"],
+                "badge_bg":         hhri_res["badge_bg"],
+                "action":           hhri_res["action"],
+                "advisory_message": hhri_res["advisory"],
+                "alert_date":       today_str,
+                "status":           "active",
+            })
+        except Exception as e:
+            continue
+
+    # Order strictly by heat health risk severity: Very High > High > Moderate > Low, then HHRI descending
+    RISK_ORDER = {'Very High': 4, 'High': 3, 'Moderate': 2, 'Low': 1}
+    result.sort(key=lambda a: (RISK_ORDER.get(a['risk_level'], 0), a['hhri']), reverse=True)
     return jsonify(result)
 
 
@@ -1261,6 +1539,16 @@ EMERGENCY CONTACTS (Karnataka):
 """
 
     safe_name = location_name.replace(' ', '_').replace('/', '_')
+    
+    if _require_session():
+        user_id = session['user']['id']
+        db = get_db()
+        db.execute('''
+            INSERT INTO report_history (user_id, report_name, location_name, report_type)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, f"HeatSense_{safe_name}_Report.md", location_name, "Markdown"))
+        db.commit()
+
     return Response(
         report,
         mimetype="text/markdown",
@@ -1294,6 +1582,15 @@ def api_download_pdf():
     # Create a minimal district-like dict for template compatibility
     location_dict = {'name': location_name, 'latitude': lat, 'longitude': lon}
 
+    if _require_session():
+        user_id = session['user']['id']
+        db = get_db()
+        db.execute('''
+            INSERT INTO report_history (user_id, report_name, location_name, report_type)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, f"HeatSense_{location_name}_Report.pdf", location_name, "PDF View"))
+        db.commit()
+
     return render_template(
         'pdf_report.html',
         district=location_dict,
@@ -1305,3 +1602,162 @@ def api_download_pdf():
         future_chi=future_chi,
         future_risk=future_risk,
     )
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Settings & History
+# ──────────────────────────────────────────────────────────────────────────────
+
+@main_bp.route('/api/user/settings', methods=['GET', 'POST'])
+def api_user_settings():
+    if not _require_session():
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    user_id = session['user']['id']
+    db = get_db()
+    
+    if request.method == 'POST':
+        body = request.get_json() or {}
+        theme = body.get('theme', 'light')
+        language = body.get('language', 'en')
+        email_alerts = 1 if body.get('email_alerts', True) else 0
+        sms_alerts = 1 if body.get('sms_alerts', True) else 0
+        
+        existing = db.execute('SELECT * FROM user_settings WHERE user_id = ?', (user_id,)).fetchone()
+        if existing:
+            db.execute('''
+                UPDATE user_settings 
+                SET theme = ?, language = ?, email_alerts = ?, sms_alerts = ? 
+                WHERE user_id = ?
+            ''', (theme, language, email_alerts, sms_alerts, user_id))
+        else:
+            db.execute('''
+                INSERT INTO user_settings (user_id, theme, language, email_alerts, sms_alerts) 
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, theme, language, email_alerts, sms_alerts))
+            
+        full_name = body.get('full_name')
+        phone_number = body.get('phone_number')
+        if full_name:
+            db.execute('UPDATE users SET full_name = ? WHERE id = ?', (full_name, user_id))
+            session['user']['display_name'] = full_name
+        if phone_number:
+            db.execute('UPDATE users SET phone_number = ? WHERE id = ?', (phone_number, user_id))
+            session['user']['phone_number'] = phone_number
+        session.modified = True
+            
+        db.commit()
+        return jsonify({
+            'success': True,
+            'theme': theme,
+            'language': language,
+            'email_alerts': bool(email_alerts),
+            'sms_alerts': bool(sms_alerts)
+        })
+        
+    else:
+        settings = db.execute('SELECT theme, language, email_alerts, sms_alerts FROM user_settings WHERE user_id = ?', (user_id,)).fetchone()
+        if settings:
+            s_data = dict(settings)
+            s_data['email_alerts'] = bool(s_data.get('email_alerts', 1) if s_data.get('email_alerts') is not None else 1)
+            s_data['sms_alerts'] = bool(s_data.get('sms_alerts', 1) if s_data.get('sms_alerts') is not None else 1)
+            return jsonify(s_data)
+        return jsonify({'theme': 'light', 'language': 'en', 'email_alerts': True, 'sms_alerts': True})
+
+@main_bp.route('/api/user/history', methods=['GET'])
+def api_user_history():
+    if not _require_session():
+        return jsonify({'error': 'Unauthorized'}), 401
+        
+    user_id = session['user']['id']
+    db = get_db()
+    
+    search_history = db.execute('SELECT * FROM search_history WHERE user_id = ? ORDER BY search_date DESC', (user_id,)).fetchall()
+    report_history = db.execute('SELECT * FROM report_history WHERE user_id = ? ORDER BY download_date DESC', (user_id,)).fetchall()
+    
+    return jsonify({
+        'searches': [dict(r) for r in search_history],
+        'reports': [dict(r) for r in report_history]
+    })
+
+@main_bp.route('/api/user/history/search', methods=['POST'])
+def api_user_history_search():
+    if not _require_session():
+        return jsonify({'error': 'Unauthorized'}), 401
+        
+    user_id = session['user']['id']
+    body = request.get_json() or {}
+    location_name = body.get('location_name', 'Unknown')
+    lat = body.get('lat', 0.0)
+    lon = body.get('lon', 0.0)
+    chi = body.get('chi', 0.0)
+    
+    db = get_db()
+    db.execute('''
+        INSERT INTO search_history (user_id, location_name, latitude, longitude, chi_result)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (user_id, location_name, lat, lon, chi))
+    db.commit()
+    return jsonify({'success': True})
+
+@main_bp.route('/api/user/profile', methods=['GET', 'POST'])
+def api_user_profile():
+    """Get or update the logged-in user's profile (name, phone)."""
+    if not _require_session():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    user_id = session['user']['id']
+    db = get_db()
+
+    if request.method == 'GET':
+        row = db.execute(
+            'SELECT full_name, email, phone_number FROM users WHERE id = ?', (user_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'User not found'}), 404
+        return jsonify({
+            'display_name': row['full_name'] or '',
+            'email':        row['email'] or '',
+            'phone_number': row['phone_number'] or '',
+        })
+
+    # POST — save updated profile
+    body = request.get_json() or {}
+    full_name    = (body.get('full_name') or '').strip()
+    phone_number = (body.get('phone_number') or '').strip()
+    email        = (body.get('email') or '').strip().lower()
+
+    if not full_name:
+        return jsonify({'success': False, 'error': 'Name cannot be empty.'}), 400
+    if len(full_name) < 2:
+        return jsonify({'success': False, 'error': 'Name must be at least 2 characters.'}), 400
+    if not email:
+        return jsonify({'success': False, 'error': 'Email cannot be empty.'}), 400
+    if not _is_valid_email(email):
+        return jsonify({'success': False, 'error': 'Please enter a valid email address.'}), 400
+    if phone_number and not _is_valid_phone(phone_number):
+        return jsonify({'success': False, 'error': 'Please enter a valid phone number.'}), 400
+
+    # Check if email is already used by another account
+    existing = db.execute('SELECT id FROM users WHERE email = ? AND id != ?', (email, user_id)).fetchone()
+    if existing:
+        return jsonify({'success': False, 'error': 'This email address is already in use by another account.'}), 400
+
+    db.execute(
+        'UPDATE users SET full_name = ?, phone_number = ?, email = ? WHERE id = ?',
+        (full_name, phone_number, email, user_id)
+    )
+    db.commit()
+
+    # Update session so all changes are visible immediately without re-login
+    session['user']['display_name'] = full_name
+    session['user']['phone_number'] = phone_number
+    session['user']['email']        = email
+    session.modified = True
+
+    return jsonify({
+        'success': True,
+        'display_name': full_name,
+        'phone_number': phone_number,
+        'email':        email,
+    })
+

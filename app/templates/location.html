@@ -251,7 +251,7 @@
             -webkit-appearance: none;
             height: 4px;
             border-radius: 4px;
-            background: linear-gradient(to right, var(--orange) 0%, var(--orange) var(--pct, 40%), rgba(255,255,255,0.1) var(--pct, 40%), rgba(255,255,255,0.1) 100%);
+            background: linear-gradient(to right, var(--orange) 0%, var(--orange) var(--pct, 8.16%), rgba(255,255,255,0.1) var(--pct, 8.16%), rgba(255,255,255,0.1) 100%);
             outline: none;
             cursor: pointer;
         }
@@ -259,6 +259,15 @@
             -webkit-appearance: none;
             width: 18px;
             height: 18px;
+            border-radius: 50%;
+            background: var(--orange);
+            box-shadow: 0 0 8px rgba(249,115,22,0.5);
+            cursor: pointer;
+        }
+        .aoi-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border: none;
             border-radius: 50%;
             background: var(--orange);
             box-shadow: 0 0 8px rgba(249,115,22,0.5);
@@ -485,11 +494,16 @@
                 <div class="aoi-selector" id="aoi-selector" style="display:none;">
                     <div class="aoi-label">
                         <span>Analysis Radius (AOI)</span>
-                        <span class="aoi-val" id="aoi-val">15 km</span>
+                        <span class="aoi-val" id="aoi-val">5 km</span>
                     </div>
                     <input type="range" class="aoi-slider" id="aoi-slider"
-                           min="5" max="50" value="15" step="5"
+                           min="1" max="50" value="5" step="1"
+                           style="--pct: 8.16%;"
                            oninput="updateAOI(this.value)">
+                    <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);margin-top:0.25rem;">
+                        <span>1 km</span>
+                        <span>50 km</span>
+                    </div>
                     <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">Area of Interest buffer around selected point</div>
                 </div>
 
@@ -520,7 +534,7 @@
         let selectedLat = null, selectedLon = null, selectedName = null;
         let currentMarker = null, aoiCircle = null, accuracyCircle = null;
         let searchTimeout = null;
-        let aoiRadius = 15000; // metres
+        let aoiRadius = 5000; // metres (default 5 km)
 
         // ── Initialize Leaflet map ────────────────────────────────────────────
         const map = L.map('location-map', {
@@ -529,11 +543,15 @@
             zoomControl: true,
         });
 
-        // Premium dark tile layer
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '© OpenStreetMap contributors, © CARTO',
-            subdomains: 'abcd',
-            maxZoom: 19
+        // Premium dark tile layer (ArcGIS World Dark Gray Canvas — No API key required)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
+            maxZoom: 18
+        }).addTo(map);
+
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Esri',
+            maxZoom: 18
         }).addTo(map);
 
         // Custom orange marker
@@ -762,6 +780,8 @@
 
             document.getElementById('location-card').classList.add('show');
             document.getElementById('aoi-selector').style.display = 'block';
+            const slider = document.getElementById('aoi-slider');
+            if (slider) updateAOI(slider.value);
         }
 
         // ── Search ────────────────────────────────────────────────────────────
@@ -847,10 +867,13 @@
 
         // ── AOI slider ────────────────────────────────────────────────────────
         function updateAOI(val) {
-            aoiRadius = parseInt(val) * 1000;
+            val = parseInt(val, 10);
+            aoiRadius = val * 1000;
             document.getElementById('aoi-val').textContent = val + ' km';
             const slider = document.getElementById('aoi-slider');
-            const pct = ((val - 5) / (50 - 5)) * 100;
+            const min = parseFloat(slider.min) || 1;
+            const max = parseFloat(slider.max) || 50;
+            const pct = Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
             slider.style.setProperty('--pct', pct + '%');
             if (aoiCircle) aoiCircle.setRadius(aoiRadius);
         }

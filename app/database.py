@@ -40,9 +40,18 @@ def init_db(db_path):
         email TEXT UNIQUE NOT NULL COLLATE NOCASE,
         phone_number TEXT NOT NULL,
         password_hash TEXT NOT NULL,
+        is_admin INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """)
+
+    # Migration check for existing databases
+    try:
+        user_cols = [c[1] for c in cursor.execute("PRAGMA table_info(users)").fetchall()]
+        if 'is_admin' not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+    except Exception:
+        pass
 
     # Districts table (Karnataka administrative districts — seed data)
     cursor.execute("""
@@ -102,6 +111,52 @@ def init_db(db_path):
         temp_reduction REAL NOT NULL,
         run_date TEXT NOT NULL,
         FOREIGN KEY (district_id) REFERENCES districts (id)
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_settings (
+        user_id INTEGER PRIMARY KEY,
+        theme TEXT DEFAULT 'light',
+        language TEXT DEFAULT 'en',
+        email_alerts INTEGER DEFAULT 1,
+        sms_alerts INTEGER DEFAULT 1,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+    """)
+
+    # Migration check for user_settings (email_alerts, sms_alerts)
+    try:
+        settings_cols = [c[1] for c in cursor.execute("PRAGMA table_info(user_settings)").fetchall()]
+        if 'email_alerts' not in settings_cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN email_alerts INTEGER DEFAULT 1")
+        if 'sms_alerts' not in settings_cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN sms_alerts INTEGER DEFAULT 1")
+    except Exception:
+        pass
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS search_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        location_name TEXT,
+        latitude REAL,
+        longitude REAL,
+        chi_result REAL,
+        search_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS report_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        report_name TEXT,
+        location_name TEXT,
+        report_type TEXT,
+        download_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
     );
     """)
 

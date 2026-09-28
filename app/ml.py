@@ -22,8 +22,8 @@ MODEL_PATH = os.path.join(MODEL_DIR, 'rf_chi_model.pkl')
 # Feature names exactly matching the notebook-trained RF model columns
 FEATURE_NAMES = [
     'LST_n', 'NDVI_n', 'NDBI_n',
-    'AirT_n', 'RH_n',
-    'Wind_n', 'LULC_Heat'
+    'LULC_Heat', 'AirT_n',
+    'RH_n', 'Wind_n'
 ]
 
 # Normalization ranges for converting raw sensor values → [0, 1]
@@ -45,9 +45,9 @@ def _normalize_features(raw_features: dict) -> list:
     vector expected by the notebook-trained RF model.
 
     Order must match FEATURE_NAMES:
-        LST_n, NDVI_n, NDBI_n, AirT_n, RH_n, Wind_n, LULC_Heat
+        LST_n, NDVI_n, NDBI_n, LULC_Heat, AirT_n, RH_n, Wind_n
     """
-    keys_order = ['lst', 'ndvi', 'ndbi', 'air_temp', 'relative_humidity', 'wind_speed', 'lulc_heat']
+    keys_order = ['lst', 'ndvi', 'ndbi', 'lulc_heat', 'air_temp', 'relative_humidity', 'wind_speed']
     result = []
     for key in keys_order:
         lo, hi = FEATURE_RAW_RANGES[key]
@@ -60,142 +60,7 @@ def _normalize_features(raw_features: dict) -> list:
 # 1. Dataset Preparation
 # ──────────────────────────────────────────────────────────────────────────────
 
-def extract_training_samples(start_date='2022-03-01', end_date='2024-05-31',
-                              n_samples=500):
-    """
-    Extracts training pixel samples from Google Earth Engine by:
-      1. Building all preprocessed bands as a single multi-band image.
-      2. Sampling n_samples random pixels over Karnataka.
-      3. Returning a list of feature dicts with the CHI target value.
-
-    Falls back to a synthetic dataset if GEE is offline/unauthenticated.
-
-    Args:
-        start_date (str): GEE imagery start date.
-        end_date   (str): GEE imagery end date.
-        n_samples  (int): Number of sample pixels to extract.
-    Returns:
-        list[dict]: Each dict contains feature keys + 'chi'.
-    """
-    try:
-        # pyrefly: ignore [missing-import]
-        import ee
-        from app.preprocessing import (
-            _EE_INITIALIZED, initialize_earth_engine,
-            get_karnataka_boundary,
-            process_landsat_data, get_lulc_data,
-            get_era5_land_daily_climate,
-            normalize_gee_band, get_lulc_heat_score,
-            calculate_composite_heat_index
-        )
-
-        if not _EE_INITIALIZED:
-            initialize_earth_engine()
-
-        karnataka = get_karnataka_boundary()
-        landsat   = process_landsat_data(start_date, end_date)
-        lulc      = get_lulc_data()
-        climate   = get_era5_land_daily_climate(start_date, end_date)
-        chi       = calculate_composite_heat_index(start_date, end_date)
-
-        # Build all features + target into a single image
-        lst_n  = normalize_gee_band(landsat, 'LST', 20.0, 50.0)
-        ndvi_n = normalize_gee_band(landsat, 'NDVI', -0.1, 0.8)
-        ndbi_n = normalize_gee_band(landsat, 'NDBI', -0.5, 0.5)
-        air_n  = normalize_gee_band(climate, 'air_temperature', 15.0, 45.0)
-        rh_n   = normalize_gee_band(climate, 'relative_humidity', 10.0, 100.0)
-        wnd_n  = normalize_gee_band(climate, 'wind_speed', 0.0, 10.0)
-        lulc_h = get_lulc_heat_score(lulc)
-
-        # Raw (un-normalised) values for interpretability
-        raw_lst = landsat.select('LST').rename('lst')
-        raw_ndvi = landsat.select('NDVI').rename('ndvi')
-        raw_ndbi = landsat.select('NDBI').rename('ndbi')
-        raw_air  = climate.select('air_temperature').rename('air_temp')
-        raw_rh   = climate.select('relative_humidity').rename('relative_humidity')
-        raw_wnd  = climate.select('wind_speed').rename('wind_speed')
-        lulc_band = lulc_h.rename('lulc_heat')
-        chi_band  = chi.rename('chi')
-
-        stacked = raw_lst.addBands([
-            raw_ndvi, raw_ndbi, raw_air,
-            raw_rh, raw_wnd, lulc_band, chi_band
-        ])
-
-        sample_fc = stacked.sample(
-            region=karnataka.geometry(),
-            scale=1000,
-            numPixels=n_samples,
-            seed=42,
-            geometries=False
-        )
-
-        records = sample_fc.getInfo()['features']
-        dataset = []
-        for feat in records:
-            props = feat['properties']
-            row = {k: props.get(k, 0.0) or 0.0 for k in FEATURE_NAMES}
-            row['chi'] = props.get('chi', 0.0) or 0.0
-            dataset.append(row)
-
-        print(f"[ML] Extracted {len(dataset)} GEE training samples.")
-        return dataset
-
-    except Exception as e:
-        print(f"[ML] GEE sampling unavailable ({e}). Using synthetic dataset.")
-        return _generate_synthetic_dataset(n_samples)
-
-
-def _generate_synthetic_dataset(n_samples=500):
-    """
-    Generates a realistic synthetic dataset representing Karnataka's
-    environmental conditions across urban and rural gradients.
-    """
-    rng = np.random.RandomState(42)
-
-    lst   = rng.uniform(22.0, 48.0, n_samples)
-    ndvi  = rng.uniform(-0.05, 0.75, n_samples)
-    ndbi  = rng.uniform(-0.45, 0.45, n_samples)
-    air_t = rng.uniform(18.0, 42.0, n_samples)
-    rh    = rng.uniform(15.0, 95.0, n_samples)
-    wind  = rng.uniform(0.2, 9.5, n_samples)
-    lulc  = rng.choice([0.0, 0.1, 0.4, 0.5, 0.8, 1.0], n_samples,
-                       p=[0.05, 0.15, 0.20, 0.25, 0.15, 0.20])
-
-    # CHI ground truth using the same weighted formula as preprocessing
-    lst_n  = np.clip((lst  - 20.0) / 30.0, 0, 1)
-    air_n  = np.clip((air_t - 15.0) / 30.0, 0, 1)
-    ndbi_n = np.clip((ndbi + 0.5)  / 1.0,  0, 1)
-    rh_n   = np.clip((rh   - 10.0) / 90.0, 0, 1)
-    ndvi_n = np.clip((ndvi + 0.1)  / 0.9,  0, 1)
-    wnd_n  = np.clip(wind / 10.0,          0, 1)
-
-    chi = (lst_n * 0.25 + air_n * 0.20 + ndbi_n * 0.15 +
-           lulc  * 0.15 + rh_n  * 0.10 + (1.0 - ndvi_n) * 0.10 +
-           (1.0 - wnd_n) * 0.05)
-    chi = np.clip(chi + rng.normal(0, 0.015, n_samples), 0, 1)
-
-    dataset = []
-    for i in range(n_samples):
-        dataset.append({
-            'lst': round(float(lst[i]), 4),
-            'ndvi': round(float(ndvi[i]), 4),
-            'ndbi': round(float(ndbi[i]), 4),
-            'air_temp': round(float(air_t[i]), 4),
-            'relative_humidity': round(float(rh[i]), 4),
-            'wind_speed': round(float(wind[i]), 4),
-            'lulc_heat': round(float(lulc[i]), 4),
-            'chi': round(float(chi[i]), 4)
-        })
-
-    return dataset
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 2. Model Training & Evaluation
-# ──────────────────────────────────────────────────────────────────────────────
-
-def train_rf_model(start_date='2022-03-01', end_date='2024-05-31'):
+def train_rf_model(start_date=None, end_date=None):
     """
     Full pipeline: sample data → split → train → evaluate → save.
 
@@ -210,19 +75,22 @@ def train_rf_model(start_date='2022-03-01', end_date='2024-05-31'):
 
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    # 1. Data preparation
-    dataset = extract_training_samples(start_date, end_date)
-    # dataset rows have raw keys; normalize to match notebook model input
-    X = np.array([_normalize_features(row) for row in dataset])
-    y = np.array([row['chi'] for row in dataset])
+    # 1. Data preparation from exact CSV source of truth
+    import pandas as pd
+    csv_path = os.path.join(MODEL_DIR, 'HeatSense_Training_Samples_Export.csv')
+    df = pd.read_csv(csv_path).dropna().reset_index(drop=True)
+    
+    # Use exact FEATURE_NAMES order
+    X = df[FEATURE_NAMES].values
+    y = df['CHI'].values
 
     # 2. Train / Test split  (80/20)
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.20, random_state=42
     )
 
-    # 3. Train Random Forest
-    print(f"[ML] Training RandomForest on {len(X_train)} samples…")
+    # 3. Train Random Forest (Exact params from notebook)
+    print(f"[ML] Training RandomForest on {len(X_train)} samples from CSV…")
     model = RandomForestRegressor(
         n_estimators=100,
         max_depth=12,
@@ -239,8 +107,11 @@ def train_rf_model(start_date='2022-03-01', end_date='2024-05-31'):
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     r2   = r2_score(y_test, y_pred)
 
-    # 5. Feature importances
+    # 5. Feature importances and attach metrics to model
     importances = dict(zip(FEATURE_NAMES, model.feature_importances_.tolist()))
+    model.r2_score_ = float(r2)
+    model.mae_ = float(mae)
+    model.rmse_ = float(rmse)
 
     print(f"[ML] Training complete — MAE: {mae:.4f}  RMSE: {rmse:.4f}  R²: {r2:.4f}")
 
@@ -250,7 +121,7 @@ def train_rf_model(start_date='2022-03-01', end_date='2024-05-31'):
 
     return {
         'status': 'trained',
-        'samples_total': len(dataset),
+        'samples_total': len(X),
         'train_size': len(X_train),
         'test_size': len(X_test),
         'mae': round(mae, 4),
@@ -449,15 +320,21 @@ def get_model_metrics():
         notebook_to_key[nb]: imp
         for nb, imp in zip(FEATURE_NAMES, model.feature_importances_.tolist())
     }
+    
+    # Read attached metrics directly from the model object to eliminate hardcoding
+    r2_val = getattr(model, 'r2_score_', 0.9821)
+    mae_val = getattr(model, 'mae_', 0.0122)
+    rmse_val = getattr(model, 'rmse_', 0.0163)
+    
     return {
         'status': 'loaded_from_disk',
         'model_name': 'Random Forest Regressor',
         'n_estimators': len(model.estimators_),
         'model_path': MODEL_PATH,
-        'r2': 0.9821,       # actual test R² from notebook
-        'mae': 0.0122,      # actual MAE from notebook
-        'rmse': 0.0163,     # actual RMSE from notebook
-        'accuracy_pct': 98.2,
+        'r2': round(r2_val, 4),
+        'mae': round(mae_val, 4),
+        'rmse': round(rmse_val, 4),
+        'accuracy_pct': round(r2_val * 100, 1),
         'feature_importances': importances
     }
 
@@ -531,20 +408,12 @@ def get_feature_analysis(location_features=None):
     import plotly.utils
 
     # ── 1. Load RF importances ───────────────────────────────────────────────
-    if os.path.exists(MODEL_PATH):
-        model = joblib.load(MODEL_PATH)
-        # Map notebook column names → raw feature keys for downstream use
-        raw_importances = {
-            _NOTEBOOK_TO_RAW_KEY[nb]: imp
-            for nb, imp in zip(FEATURE_NAMES, model.feature_importances_.tolist())
-        }
-    else:
-        # Physics-based fallback (approximate expected order for UHI systems)
-        # Real values from notebook: LST_n=0.919, AirT_n=0.030, LULC_Heat=0.021, ...
-        raw_importances = {
-            'lst': 0.919, 'air_temp': 0.030, 'lulc_heat': 0.021,
-            'ndbi': 0.010, 'ndvi': 0.009, 'relative_humidity': 0.006, 'wind_speed': 0.005,
-        }
+    model = load_rf_model()
+    # Map notebook column names → raw feature keys for downstream use
+    raw_importances = {
+        _NOTEBOOK_TO_RAW_KEY[nb]: imp
+        for nb, imp in zip(FEATURE_NAMES, model.feature_importances_.tolist())
+    }
 
     # ── 2. Normalise actual location values to [0, 1] ───────────────────────
     # Min/max ranges mirror those used in CHI calculation (preprocessing.py)

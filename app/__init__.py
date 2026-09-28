@@ -30,6 +30,7 @@ def create_app(test_config=None):
         FIREBASE_STORAGE_BUCKET=    os.environ.get('FIREBASE_STORAGE_BUCKET', ''),
         FIREBASE_MESSAGING_SENDER_ID=os.environ.get('FIREBASE_MESSAGING_SENDER_ID', ''),
         FIREBASE_APP_ID=            os.environ.get('FIREBASE_APP_ID', ''),
+        FIREBASE_MEASUREMENT_ID=    os.environ.get('FIREBASE_MEASUREMENT_ID', ''),
     )
 
     if test_config is None:

@@ -6,8 +6,8 @@
 <div class="container">
 
     <!-- Page Header -->
-    <div class="row mb-4 mt-3">
-        <div class="col d-flex align-items-center gap-3">
+    <div class="row mb-4 mt-3 align-items-center">
+        <div class="col-md d-flex align-items-center gap-3">
             <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="HeatSense Logo" style="width:48px;height:48px;border-radius:12px;background:white;padding:2px;border:1px solid rgba(249,115,22,0.4);">
             <div>
                 <h1 class="h2 fw-bold mb-1 text-gradient">Heat Health Risk Dashboard</h1>
@@ -15,6 +15,20 @@
                     Real-time Heat Health Risk Index (HHRI) computed per district using satellite data, ML model, air temperature, humidity, and population vulnerability.
                 </p>
             </div>
+        </div>
+        <div class="col-md-auto mt-3 mt-md-0 d-flex gap-2">
+            <button class="btn btn-outline-warning d-flex align-items-center gap-2 fw-semibold shadow-sm text-white"
+                    style="background:rgba(249,115,22,0.15);border:1px solid #f97316;border-radius:10px;padding:0.65rem 1.25rem;"
+                    id="btn-alerts-test-header" onclick="triggerAlertsTestNotification()">
+                <i class="fa-solid fa-vial text-warning"></i>
+                <span>Send Test Notification</span>
+            </button>
+            <button class="btn btn-warning d-flex align-items-center gap-2 fw-semibold shadow-sm text-white"
+                    style="background: linear-gradient(135deg, #f97316, #ea580c); border:none; padding:0.65rem 1.25rem; border-radius:10px; cursor:pointer;"
+                    data-bs-toggle="modal" data-bs-target="#twilioDispatchModal">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>Dispatch Alert</span>
+            </button>
         </div>
     </div>
 
@@ -120,93 +134,116 @@
                 </div>
             </div>
 
-            <!-- Alert Log Table -->
+            <!-- ── System Alerts: Highest Risk Districts ──────────────────── -->
             <div class="card border-0 shadow-sm">
-                <div class="card-header bg-danger text-white py-3 d-flex
-                            justify-content-between align-items-center">
-                    <h5 class="card-title mb-0 text-white">⚠️ District Alert Log</h5>
-                    <span class="badge bg-white text-danger">
-                        {{ alerts|length }} Alert{% if alerts|length != 1 %}s{% endif %}
-                    </span>
+                <div class="card-header py-3 d-flex justify-content-between align-items-center"
+                     style="background: linear-gradient(135deg,#1a0a0a 0%,#2d0a0a 100%); border-bottom:1px solid rgba(239,68,68,0.3);">
+                    <div>
+                        <h5 class="card-title mb-0 text-white">⚠️ System Alerts</h5>
+                        <small class="text-white-50">Karnataka districts ranked by heat health risk severity</small>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if tier_counts['Very High'] > 0 %}
+                        <span class="badge bg-danger fw-semibold" style="font-size:0.72rem;">
+                            🔴 {{ tier_counts['Very High'] }} EMERGENCY
+                        </span>
+                        {% endif %}
+                        {% if tier_counts['High'] > 0 %}
+                        <span class="badge fw-semibold" style="background:#e67e22;font-size:0.72rem;">
+                            🟠 {{ tier_counts['High'] }} HIGH
+                        </span>
+                        {% endif %}
+                        <span class="badge bg-secondary" style="font-size:0.72rem;">
+                            {{ top_risk_districts|length }} districts at risk
+                        </span>
+                    </div>
                 </div>
                 <div class="card-body p-0">
-                    {% if alerts %}
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th class="ps-3" style="color:#f8fafc;">Date</th>
-                                    <th style="color:#f8fafc;">District</th>
-                                    <th style="color:#f8fafc;">Risk Level</th>
-                                    <th style="color:#f8fafc;">Advisory</th>
-                                    <th style="color:#f8fafc;">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for alert in alerts %}
-                                <tr>
-                                    <td class="ps-3 small" style="color:#cbd5e1;">{{ alert.alert_date }}</td>
-                                    <td class="fw-semibold text-white">{{ alert.district_name }}</td>
-                                    <td>
-                                        {% if alert.risk_level == 'Very High' %}
-                                            <span class="badge bg-danger">🔴 Very High</span>
-                                        {% elif alert.risk_level == 'High' %}
-                                            <span class="badge"
-                                                  style="background:#e67e22;">🟠 High</span>
-                                        {% elif alert.risk_level == 'Moderate' %}
-                                            <span class="badge bg-warning text-dark">🟡 Moderate</span>
-                                        {% else %}
-                                            <span class="badge bg-success">🟢 Low</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="small" style="max-width:320px; color:#cbd5e1;">
-                                        {{ alert.advisory_message[:100] }}…
-                                    </td>
-                                    <td>
-                                        {% if alert.status == 'active' %}
-                                        <span class="badge bg-success-subtle text-success
-                                                     border border-success">
-                                            Active
+                    {% if top_risk_districts %}
+                    <div style="max-height:520px; overflow-y:auto;">
+                        {% for district in top_risk_districts %}
+                        {% set rank = loop.index %}
+                        <div class="d-flex align-items-start p-3 {% if not loop.last %}border-bottom{% endif %}"
+                             style="border-color:rgba(255,255,255,0.06)!important;
+                                    {% if district.risk_level == 'Very High' %}background:rgba(239,68,68,0.07);{% elif district.risk_level == 'High' %}background:rgba(230,126,34,0.06);{% endif %}
+                                    transition:background 0.2s;"
+                             onmouseover="this.style.background='rgba(249,115,22,0.08)'"
+                             onmouseout="this.style.background='{% if district.risk_level == "Very High" %}rgba(239,68,68,0.07){% elif district.risk_level == "High" %}rgba(230,126,34,0.06){% else %}transparent{% endif %}'">
+
+                            <!-- Rank number -->
+                            <div class="me-3 text-center flex-shrink-0" style="width:32px;">
+                                {% if rank <= 3 and district.risk_level in ('Very High', 'High') %}
+                                <div class="fw-bold" style="font-size:1.1rem;
+                                    color:{% if rank==1 %}#ef4444{% elif rank==2 %}#f97316{% else %}#eab308{% endif %};">
+                                    #{{ rank }}
+                                </div>
+                                {% else %}
+                                <div class="text-muted fw-semibold" style="font-size:0.9rem;">#{{ rank }}</div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Risk icon -->
+                            <div class="me-3 flex-shrink-0 d-flex align-items-center justify-content-center rounded-circle"
+                                 style="width:40px;height:40px;background:{{ district.badge_bg }}22;
+                                        border:1.5px solid {{ district.badge_bg }}55;">
+                                <span style="font-size:1.1rem;">{{ district.risk_icon }}</span>
+                            </div>
+
+                            <!-- Content -->
+                            <div class="flex-grow-1 min-width-0">
+                                <div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-1">
+                                    <div>
+                                        <span class="fw-bold text-white" style="font-size:0.95rem;">{{ district.name }}</span>
+                                        <span class="badge ms-2 text-white"
+                                              style="background:{{ district.badge_bg }};font-size:0.68rem;">
+                                            {{ district.risk_level }}
                                         </span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">Resolved</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                                    </div>
+                                    <div class="text-end flex-shrink-0">
+                                        <span class="fw-bold" style="color:{{ district.badge_bg }};font-size:1.05rem;">
+                                            {{ "%.3f"|format(district.hhri) }}
+                                        </span>
+                                        <span class="text-muted d-block" style="font-size:0.65rem;line-height:1;">HHRI</span>
+                                    </div>
+                                </div>
+
+                                <!-- HHRI progress bar -->
+                                <div class="mb-1" style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;">
+                                    <div style="height:100%;width:{{ (district.hhri * 100)|round(1) }}%;
+                                                background:{{ district.badge_bg }};border-radius:2px;
+                                                transition:width 0.8s ease;"></div>
+                                </div>
+
+                                <p class="mb-0 small" style="color:#94a3b8;line-height:1.4;font-size:0.78rem;">
+                                    {{ district.advisory[:140] }}{% if district.advisory|length > 140 %}…{% endif %}
+                                </p>
+
+                                <!-- Tags -->
+                                <div class="mt-1 d-flex gap-1 flex-wrap">
+                                    <span class="badge" style="background:rgba(255,255,255,0.08);color:#cbd5e1;font-size:0.62rem;">
+                                        📅 {{ now.strftime('%Y-%m-%d') if now else 'Today' }}
+                                    </span>
+                                    <span class="badge" style="background:rgba(255,255,255,0.08);color:#cbd5e1;font-size:0.62rem;">
+                                        ⚡ {{ district.action }}
+                                    </span>
+                                    <span class="badge" style="background:rgba(16,185,129,0.15);color:#34d399;font-size:0.62rem;">
+                                        ● active
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
                     {% else %}
                     <div class="text-center py-5" style="color:#cbd5e1;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"
-                             fill="#27ae60" class="mb-3" viewBox="0 0 16 16">
-                            <path d="M5.338 1.59a61.77 61.77 0 0 0-2.837.856.481.481 0 0
-                                     0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.725 10.725
-                                     0 0 0 2.287 2.233c.346.244.652.42.893.533.12.057.218.095.293.118a.55.55
-                                     0 0 0 .101.025.615.615 0 0 0 .1-.025c.076-.023.174-.061.294-.118.24-.113.547-.29.893-.533a10.726
-                                     10.726 0 0 0 2.287-2.233c1.527-1.997 2.807-5.031
-                                     2.253-9.188a.48.48 0 0 0-.328-.39c-.651-.213-1.75-.56-2.837-.855C9.552
-                                     1.29 8.531 1.067 8 1.067c-.53 0-1.552.223-2.662.524zM5.072.56C6.157.265
-                                     7.31 0 8 0s1.843.265 2.928.56c1.11.3 2.229.655
-                                     2.887.87a1.54 1.54 0 0 1 1.044 1.262c.596 4.477-.787
-                                     7.795-2.465 9.99a11.775 11.775 0 0 1-2.517 2.453 7.159
-                                     7.159 0 0 1-1.048.625c-.28.132-.581.24-.829.24s-.548-.108-.829-.24a7.158
-                                     7.158 0 0 1-1.048-.625 11.777 11.777 0 0
-                                     1-2.517-2.453C1.928 10.487.545 7.169 1.141 2.692A1.54 1.54 0
-                                     0 1 2.185 1.43 62.456 62.456 0 0 1 5.072.56z"/>
-                            <path d="M10.854 5.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0
-                                     1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 7.793l2.646-2.647a.5.5 0 0 1 .708 0z"/>
-                        </svg>
+                        <div style="font-size:2.5rem;margin-bottom:8px;">✅</div>
                         <p class="mb-1 fw-semibold fs-5 text-white">All Districts Within Safe Range</p>
-                        <span class="small" style="color:#cbd5e1;">
-                            No active heat stress alerts at this time.
-                        </span>
+                        <span class="small" style="color:#cbd5e1;">No active heat stress alerts at this time.</span>
                     </div>
                     {% endif %}
                 </div>
             </div>
-        </div>
+
 
         <!-- ── RIGHT: Health Guide + Emergency Contacts ───────────────────── -->
         <div class="col-lg-4">
@@ -312,14 +349,373 @@
                             <td class="text-primary fw-bold">080-22221188</td>
                         </tr>
                         <tr>
-                            <td><strong>National Disaster Mgmt:</strong></td>
-                            <td class="text-primary fw-bold">011-26701700</td>
-                        </tr>
-                    </table>
+       <!-- ── Alert Dispatch Modal ──────────────────────────────────────── -->
+<div class="modal fade" id="twilioDispatchModal" tabindex="-1" aria-labelledby="twilioDispatchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" style="background:var(--bg-card, #161b22);border:1px solid rgba(249,115,22,0.3);border-radius:14px;color:#f3f4f6;">
+            <div class="modal-header" style="border-bottom:1px solid rgba(255,255,255,0.08);background:linear-gradient(135deg,#1f130a 0%,#2d1808 100%);">
+                <div class="d-flex align-items-center gap-2">
+                    <span style="font-size:1.4rem;">&#x1F6A8;</span>
+                    <div>
+                        <h5 class="modal-title fw-bold text-white mb-0" id="twilioDispatchModalLabel">Dispatch Heat Health Alert</h5>
+                        <small style="color:#f97316;font-size:0.75rem;">Twilio SMS Gateway &bull; Twilio SendGrid Email &bull; Logged-in Account Only</small>
+                    </div>
                 </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
+            <div class="modal-body p-4">
+                <!-- Logged-in Recipient Info Box (Direct Database Source) -->
+                <div class="p-3 mb-3 rounded" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <div class="small fw-bold text-warning"><i class="fa-solid fa-user-shield me-1"></i> Verified Database Recipient</div>
+                        <span class="badge bg-secondary" style="font-size:0.7rem;">Session Account</span>
+                    </div>
+                    <div class="small text-light">
+                        <b>{{ session.user.display_name if session.user else 'Authenticated User' }}</b> &bull;
+                        <span class="text-info"><i class="fa-solid fa-mobile-screen ms-1 me-1"></i>{{ session.user.phone_number if session.user and session.user.phone_number else 'No phone registered' }}</span> &bull;
+                        <span class="text-info"><i class="fa-solid fa-envelope ms-1 me-1"></i>{{ session.user.email if session.user and session.user.email else 'No email registered' }}</span>
+                    </div>
+                    <div class="small text-muted mt-1" style="font-size:0.75rem;">
+                        Notifications are dispatched <b>ONLY to your registered phone and email</b> stored in the database.
+                    </div>
+                </div>
 
+                <!-- Mode Toggle -->
+                <div class="d-flex gap-2 mb-3" id="mode-toggle-row">
+                    <button type="button" id="btn-mode-auto" onclick="setMessageMode('auto')"
+                        class="btn btn-sm fw-semibold flex-fill"
+                        style="background:rgba(249,115,22,0.2);border:1px solid #f97316;color:#f97316;border-radius:8px;">
+                        &#x1F916; Auto-Generate from Risk Data
+                    </button>
+                    <button type="button" id="btn-mode-custom" onclick="setMessageMode('custom')"
+                        class="btn btn-sm fw-semibold flex-fill"
+                        style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#94a3b8;border-radius:8px;">
+                        &#x270D;&#xFE0F; Write Custom Message
+                    </button>
+                </div>
+
+                <form id="twilio-dispatch-form" onsubmit="submitTwilioAlert(event)">
+
+                    <!-- AUTO MODE -->
+                    <div id="section-auto">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-semibold">Target District / Location</label>
+                            <select class="form-select text-white" id="dispatch-location" style="background:#0f172a;border-color:rgba(255,255,255,0.15);" onchange="onDispatchDistrictChange(this.value)">
+                                {% for d in district_risk_cards %}
+                                <option value="{{ d.name }}" data-risk="{{ d.risk_level }}" data-hhri="{{ d.hhri }}" data-advisory="{{ d.advisory }}">{{ d.name }} ({{ d.risk_level }} &bull; HHRI {{ "%.3f"|format(d.hhri) }})</option>
+                                {% endfor %}
+                                <option value="Bengaluru Urban" data-risk="High" data-hhri="0.72">Bengaluru Urban</option>
+                            </select>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-4">
+                                <label class="form-label text-muted small fw-semibold">Risk Level</label>
+                                <select class="form-select text-white" id="dispatch-risk" style="background:#0f172a;border-color:rgba(255,255,255,0.15);">
+                                    <option value="Very High">&#x1F534; Very High (Severe)</option>
+                                    <option value="High" selected>&#x1F7E0; High</option>
+                                    <option value="Moderate">&#x1F7E1; Moderate</option>
+                                    <option value="Low">&#x1F7E2; Low</option>
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label text-muted small fw-semibold">HHRI Value</label>
+                                <input type="number" step="0.001" class="form-control text-white" id="dispatch-hhri" value="0.750" style="background:#0f172a;border-color:rgba(255,255,255,0.15);">
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label text-muted small fw-semibold">Temperature (°C)</label>
+                                <input type="number" step="0.1" class="form-control text-white" id="dispatch-temp" value="36.5" style="background:#0f172a;border-color:rgba(255,255,255,0.15);">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-semibold">Advisory / Precaution Text</label>
+                            <textarea class="form-control text-white" id="dispatch-advisory" rows="2" style="background:#0f172a;border-color:rgba(255,255,255,0.15);font-size:0.82rem;">High heat stress detected. Limit outdoor activity during peak hours, hydrate frequently with 3+ litres daily, and assist vulnerable groups.</textarea>
+                        </div>
+                    </div>
+
+                    <!-- CUSTOM MODE -->
+                    <div id="section-custom" style="display:none;">
+                        <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.78rem;color:#6ee7b7;">
+                            &#x270D;&#xFE0F; <b>Custom message mode:</b> Writes personalized SMS and email directly dispatched to your registered phone and email.
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-semibold">Email Subject Line (Twilio SendGrid)</label>
+                            <input type="text" class="form-control text-white" id="custom-subject"
+                                placeholder="e.g. Urgent Heat Alert for Mangaluru Region"
+                                value="&#x1F321;&#xFE0F; High Heat Health Alert &#x2013; HeatSense"
+                                style="background:#0f172a;border-color:rgba(255,255,255,0.15);">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-semibold">SMS Message (Twilio SMS)</label>
+                            <textarea class="form-control text-white" id="custom-sms" rows="3"
+                                style="background:#0f172a;border-color:rgba(255,255,255,0.15);font-size:0.82rem;"
+                                oninput="updateSmsCounter()">HeatSense Alert: High heat detected in your area. Stay indoors 11AM-4PM. Drink 3L water daily. Call 104 (Health) or 108 (Ambulance) if needed.</textarea>
+                            <div style="font-size:0.7rem;color:#64748b;text-align:right;margin-top:2px;">
+                                <span id="sms-char-count">0</span> / 160 chars
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-semibold">Email Body</label>
+                            <textarea class="form-control text-white" id="custom-email-body" rows="5"
+                                style="background:#0f172a;border-color:rgba(255,255,255,0.15);font-size:0.82rem;">Dear HeatSense User,
+
+High heat conditions have been detected in your area. Please take the following precautions:
+• Stay indoors during 11 AM – 4 PM
+• Drink at least 3 litres of water or ORS daily
+• Avoid strenuous outdoor activity
+• Check on elderly, children and outdoor workers nearby
+
+Emergency Contacts:
+• Health Helpline: 104
+• Ambulance: 108
+
+Stay safe,
+HeatSense Team</textarea>
+                        </div>
+                    </div>
+
+                    <!-- Result Box -->
+                    <div id="dispatch-result-box" style="display:none;margin-top:1rem;padding:0.75rem;border-radius:8px;font-size:0.8rem;line-height:1.5;max-height:240px;overflow-y:auto;"></div>
+
+                    <div class="d-flex justify-content-between align-items-center mt-4">
+                        <button type="button" class="btn btn-outline-warning btn-sm fw-semibold" id="btn-modal-test-notification" onclick="triggerAlertsTestNotification()">
+                            <i class="fa-solid fa-vial me-1"></i> Send Test Notification
+                        </button>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-warning btn-sm d-flex align-items-center gap-2 fw-semibold text-white" id="btn-submit-dispatch" style="background:linear-gradient(135deg,#f97316,#ea580c);border:none;padding:0.5rem 1.2rem;">
+                                <i class="fa-solid fa-paper-plane"></i>
+                                <span id="btn-dispatch-label">Dispatch Alert</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+let _messageMode = 'auto'; // 'auto' or 'custom'
+
+function setMessageMode(mode) {
+    _messageMode = mode;
+    const autoSection   = document.getElementById('section-auto');
+    const customSection = document.getElementById('section-custom');
+    const btnAuto   = document.getElementById('btn-mode-auto');
+    const btnCustom = document.getElementById('btn-mode-custom');
+
+    if (mode === 'custom') {
+        autoSection.style.display = 'none';
+        customSection.style.display = '';
+        btnCustom.style.background = 'rgba(16,185,129,0.2)';
+        btnCustom.style.borderColor = '#10b981';
+        btnCustom.style.color = '#10b981';
+        btnAuto.style.background = 'rgba(255,255,255,0.05)';
+        btnAuto.style.borderColor = 'rgba(255,255,255,0.15)';
+        btnAuto.style.color = '#94a3b8';
+        updateSmsCounter();
+    } else {
+        autoSection.style.display = '';
+        customSection.style.display = 'none';
+        btnAuto.style.background = 'rgba(249,115,22,0.2)';
+        btnAuto.style.borderColor = '#f97316';
+        btnAuto.style.color = '#f97316';
+        btnCustom.style.background = 'rgba(255,255,255,0.05)';
+        btnCustom.style.borderColor = 'rgba(255,255,255,0.15)';
+        btnCustom.style.color = '#94a3b8';
+    }
+}
+
+function updateSmsCounter() {
+    const el = document.getElementById('custom-sms');
+    const counter = document.getElementById('sms-char-count');
+    if (el && counter) {
+        const len = el.value.length;
+        counter.textContent = len;
+        counter.style.color = len > 160 ? '#f87171' : '#64748b';
+    }
+}
+
+function onDispatchDistrictChange(name) {
+    const sel = document.getElementById('dispatch-location');
+    const opt = sel.options[sel.selectedIndex];
+    if (opt) {
+        if (opt.dataset.risk) document.getElementById('dispatch-risk').value = opt.dataset.risk;
+        if (opt.dataset.hhri) document.getElementById('dispatch-hhri').value = parseFloat(opt.dataset.hhri).toFixed(3);
+        if (opt.dataset.advisory) document.getElementById('dispatch-advisory').value = opt.dataset.advisory;
+    }
+}
+
+// ── Send Test Notification Handler ───────────────────────────────────
+async function triggerAlertsTestNotification() {
+    const testBtns = [
+        document.getElementById('btn-alerts-test-header'),
+        document.getElementById('btn-modal-test-notification')
+    ].filter(Boolean);
+
+    testBtns.forEach(b => {
+        b.disabled = true;
+        b.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Testing...';
+    });
+
+    const box = document.getElementById('dispatch-result-box');
+    if (box) {
+        box.style.display = 'block';
+        box.style.background = 'rgba(59,130,246,0.12)';
+        box.style.border = '1px solid rgba(59,130,246,0.3)';
+        box.style.color = '#93c5fd';
+        box.innerHTML = '⏳ Sending test notification to your registered database email & phone...';
+    }
+
+    try {
+        const res = await fetch('/api/alerts/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                location: document.getElementById('dispatch-location')?.value || 'Bengaluru Urban'
+            })
+        });
+        const data = await res.json();
+        
+        let html = '';
+        if (data.success) {
+            html += `<div style="color:#10b981;font-weight:bold;margin-bottom:6px;">✓ Test Alert Dispatched to Logged-in User: ${data.recipient_user}</div>`;
+            const sms = data.results?.sms;
+            const em  = data.results?.email;
+
+            if (sms) {
+                if (sms.success) {
+                    html += `<div style="color:#10b981;"><b>✓ Twilio SMS Sent:</b> SID <code>${sms.sid}</code> (${data.recipient_phone})</div>`;
+                } else if (sms.skipped) {
+                    html += `<div style="color:#eab308;"><b>⚠️ Twilio SMS Skipped:</b> ${sms.reason}</div>`;
+                } else {
+                    html += `<div style="color:#f87171;"><b>✗ Twilio SMS Error:</b> ${sms.error}</div>`;
+                }
+            }
+
+            if (em) {
+                if (em.success) {
+                    html += `<div style="color:#10b981;"><b>✓ Email Delivered:</b> ${em.provider || 'Twilio SendGrid'} to ${em.recipient || data.recipient_email}</div>`;
+                } else if (em.skipped) {
+                    html += `<div style="color:#eab308;"><b>⚠️ Email Skipped:</b> ${em.reason}</div>`;
+                } else {
+                    html += `<div style="color:#f87171;"><b>✗ Email Error:</b> ${em.error}</div>`;
+                }
+            }
+        } else {
+            html = `<div style="color:#f87171;"><b>✗ Error:</b> ${data.error || 'Failed to dispatch test'}</div>`;
+        }
+
+        if (box) {
+            box.style.display = 'block';
+            box.style.background = data.success ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
+            box.style.border = `1px solid ${data.success ? '#10b981' : '#ef4444'}`;
+            box.innerHTML = html;
+        } else {
+            alert(data.message || 'Test notification complete.');
+        }
+    } catch (err) {
+        if (box) {
+            box.style.display = 'block';
+            box.style.background = 'rgba(239,68,68,0.15)';
+            box.style.border = '1px solid #ef4444';
+            box.style.color = '#fca5a5';
+            box.innerHTML = `⚠️ Network error: ${err.message}`;
+        }
+    } finally {
+        testBtns.forEach(b => {
+            b.disabled = false;
+            b.innerHTML = '<i class="fa-solid fa-vial me-1"></i> Send Test Notification';
+        });
+    }
+}
+
+// ── Dispatch Alert Handler ───────────────────────────────────────────
+async function submitTwilioAlert(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-submit-dispatch');
+    const box = document.getElementById('dispatch-result-box');
+
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Dispatching...';
+    box.style.display = 'none';
+
+    let payload;
+    if (_messageMode === 'custom') {
+        payload = {
+            custom: true,
+            custom_sms: document.getElementById('custom-sms').value.trim(),
+            custom_subject: document.getElementById('custom-subject').value.trim(),
+            custom_email_body: document.getElementById('custom-email-body').value.trim(),
+        };
+    } else {
+        const location = document.getElementById('dispatch-location').value;
+        const risk     = document.getElementById('dispatch-risk').value;
+        const hhri     = document.getElementById('dispatch-hhri').value;
+        const temp     = document.getElementById('dispatch-temp').value;
+        const advisory = document.getElementById('dispatch-advisory').value.trim();
+        payload = {
+            custom: false,
+            location,
+            risk_level: risk,
+            hhri: hhri,
+            temperature: temp,
+            advisory
+        };
+    }
+
+    try {
+        const res  = await fetch('/api/alerts/dispatch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        box.style.display = 'block';
+
+        let html = '';
+        if (data.success && data.results) {
+            html += `<div style="color:#10b981;font-weight:bold;margin-bottom:6px;">✓ Alert Dispatched to Logged-in Account: ${data.recipient_user}</div>`;
+            const sms = data.results.sms;
+            const em  = data.results.email;
+            if (sms) {
+                if (sms.success) {
+                    html += `<div style="color:#10b981;margin-bottom:4px;"><b>✓ Twilio SMS Sent:</b> SID <code>${sms.sid}</code> (${data.recipient_phone})</div>`;
+                } else if (sms.skipped) {
+                    html += `<div style="color:#eab308;margin-bottom:4px;"><b>⚠️ SMS Skipped:</b> ${sms.reason}</div>`;
+                } else {
+                    html += `<div style="color:#f87171;margin-bottom:4px;"><b>✗ Twilio SMS Error:</b> ${sms.error}</div>`;
+                }
+            }
+            if (em) {
+                if (em.success) {
+                    html += `<div style="color:#10b981;"><b>✓ Email Delivered:</b> ${em.provider || 'Twilio SendGrid'} to ${em.recipient || data.recipient_email}</div>`;
+                } else if (em.skipped) {
+                    html += `<div style="color:#eab308;"><b>⚠️ Email Skipped:</b> ${em.reason}</div>`;
+                } else {
+                    html += `<div style="color:#f87171;"><b>✗ Email Error:</b> ${em.error}</div>`;
+                }
+            }
+        } else if (!data.success) {
+            html = `<b style="color:#f87171;">✗ Error:</b> ${data.error || 'Unknown error'}`;
+        }
+
+        const anySuccess = data.results?.sms?.success || data.results?.email?.success;
+        box.style.background = anySuccess ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
+        box.style.border = `1px solid ${anySuccess ? '#10b981' : 'rgba(239,68,68,0.4)'}`;
+        box.innerHTML = html || 'Alert processed.';
+    } catch (err) {
+        box.style.display = 'block';
+        box.style.background = 'rgba(239,68,68,0.15)';
+        box.style.border = '1px solid #ef4444';
+        box.style.color = '#fca5a5';
+        box.innerHTML = `⚠️ Request error: ${err.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.querySelector('span').textContent = 'Dispatch Alert';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', updateSmsCounter);
+</script>
 {% endblock %}

@@ -49,6 +49,12 @@
                 <a class="nav-link" href="#" data-page="reports">
                     <i class="fa-solid fa-file-lines"></i> Reports
                 </a>
+                <a class="nav-link" href="#" data-page="history">
+                    <i class="fa-solid fa-clock-rotate-left"></i> History
+                </a>
+                <a class="nav-link" href="#" data-page="settings">
+                    <i class="fa-solid fa-gear"></i> Settings
+                </a>
             </nav>
         </aside>
 
@@ -584,24 +590,30 @@
             </div>
         </div>
     </div>
+
+    <!-- Karnataka Heat Health Risk Leaderboard (Active System Alerts) -->
+    <div class="card border-0 mb-4">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="mb-0">🏆 Karnataka Heat Health Risk Leaderboard</h6>
+                <small class="text-muted" style="font-size:0.75rem;">All Karnataka districts ranked by Heat Health Risk Index (HHRI) & thermal stress severity</small>
+            </div>
+            <span class="badge bg-danger" style="font-size:0.7rem;letter-spacing:0.5px;">ACTIVE SYSTEM ALERTS</span>
+        </div>
+        <div class="card-body" id="system-alerts-container" style="max-height: 520px; overflow-y: auto;">
+            <div class="loading-overlay"><div class="hs-spinner"></div><span>Loading health risk leaderboard...</span></div>
+        </div>
+    </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- PAGE 9: AGE-SPECIFIC ALERTS & PRECAUTIONS                               -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div id="page-alerts-precautions" class="dashboard-page">
-    <div class="section-header"><span class="section-icon">🔔</span><h4>Age-Specific Precautions & Alerts</h4></div>
+    <div class="section-header"><span class="section-icon">🛡️</span><h4>Age-Specific Heat Precautions & Advisories</h4></div>
 
     <div class="row g-3 mb-4" id="age-cards-container">
         <div class="loading-overlay"><div class="hs-spinner"></div><span>Loading precautions...</span></div>
-    </div>
-
-    <!-- Active system alerts -->
-    <div class="card border-0 mt-4">
-        <div class="card-header py-2"><h6 class="mb-0">📋 System Alerts</h6></div>
-        <div class="card-body" id="system-alerts-container">
-            <div class="loading-overlay"><div class="hs-spinner"></div><span>Loading alerts...</span></div>
-        </div>
     </div>
 </div>
 
@@ -625,6 +637,178 @@
                 <h5 class="fw-bold">PDF Report</h5>
                 <p class="text-muted small">Print-ready HTML report that can be saved as PDF using your browser's print function (Ctrl+P).</p>
                 <button class="btn btn-outline-orange" onclick="downloadReport('pdf')"><i class="fa-solid fa-file-pdf me-1"></i> Open PDF View</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 11: HISTORY                                                        -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-history" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">🕰️</span><h4>Activity History</h4></div>
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card border-0 mb-4 h-100">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Searched Locations</h6>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()"><i class="fa-solid fa-rotate"></i></button>
+                </div>
+                <div class="card-body" style="max-height: 500px; overflow-y: auto;" id="history-searches">
+                    <div class="loading-overlay"><div class="hs-spinner"></div><span>Loading history...</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 mb-4 h-100">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Downloaded Reports</h6>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()"><i class="fa-solid fa-rotate"></i></button>
+                </div>
+                <div class="card-body" style="max-height: 500px; overflow-y: auto;" id="history-reports">
+                    <div class="loading-overlay"><div class="hs-spinner"></div><span>Loading history...</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 12: SETTINGS                                                       -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div id="page-settings" class="dashboard-page">
+    <div class="section-header"><span class="section-icon">⚙️</span><h4>Account Settings</h4></div>
+    
+    <div class="row g-4">
+        <div class="col-md-8">
+            <div class="card border-0 mb-4">
+                <div class="card-header py-2 d-flex align-items-center justify-content-between">
+                    <h6 class="mb-0">Profile</h6>
+                    <div>
+                        <button id="profile-edit-btn" class="btn btn-sm btn-outline-warning" onclick="enableProfileEdit()">
+                            <i class="fa-solid fa-pen me-1"></i>Edit
+                        </button>
+                        <button id="profile-save-btn" class="btn btn-sm btn-primary d-none" onclick="saveProfile()">
+                            <i class="fa-solid fa-check me-1"></i>Save
+                        </button>
+                        <button id="profile-cancel-btn" class="btn btn-sm btn-outline-secondary ms-1 d-none" onclick="cancelProfileEdit()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="profile-error" class="alert alert-danger py-2 d-none mb-3" style="font-size:0.85rem;"></div>
+                    <div class="mb-3 row align-items-center">
+                        <label class="col-sm-3 col-form-label text-muted" for="settings-name">Name</label>
+                        <div class="col-sm-9">
+                            <input type="text" id="settings-name"
+                                   class="form-control bg-dark text-light border-secondary profile-field"
+                                   value="{{ user.display_name }}" readonly>
+                        </div>
+                    </div>
+                    <div class="mb-3 row align-items-center">
+                        <label class="col-sm-3 col-form-label text-muted" for="settings-phone">Phone</label>
+                        <div class="col-sm-9">
+                            <input type="text" id="settings-phone"
+                                   class="form-control bg-dark text-light border-secondary profile-field"
+                                   value="{{ user.phone_number }}" readonly
+                                   placeholder="e.g. +91 98765 43210">
+                        </div>
+                    </div>
+                    <div class="mb-3 row align-items-center">
+                        <label class="col-sm-3 col-form-label text-muted" for="settings-email">Email</label>
+                        <div class="col-sm-9">
+                            <input type="email" id="settings-email"
+                                   class="form-control bg-dark text-light border-secondary profile-field"
+                                   value="{{ user.email }}" readonly>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 mb-4">
+                <div class="card-header py-2 d-flex align-items-center justify-content-between">
+                    <h6 class="mb-0">Preferences &amp; Notification Settings</h6>
+                </div>
+                <div class="card-body">
+                    <form id="settings-form">
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Appearance</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="settings-theme">
+                                <option value="light">Day / Light Mode</option>
+                                <option value="dark">Night / Dark Mode</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Language</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="settings-language">
+                                <option value="en">English (Default)</option>
+                                <option value="kn">Kannada</option>
+                                <option value="hi">Hindi</option>
+                            </select>
+                        </div>
+
+                        <hr class="border-secondary my-3">
+                        <h6 class="text-white mb-2" style="font-size:0.95rem;">
+                            <i class="fa-solid fa-bell text-warning me-1"></i> Heat-Health Alert Notifications
+                        </h6>
+                        <p class="text-muted small mb-3">
+                            Choose how you receive HeatSense High and Severe heat stress alerts. Notifications are sent <b>ONLY to your registered email and phone number</b> stored in the database.
+                        </p>
+
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="settings-email-alerts" checked>
+                            <label class="form-check-label text-light small" for="settings-email-alerts">
+                                <b>Email Notifications</b> (Twilio SendGrid) &mdash; <span class="text-muted">{{ user.email }}</span>
+                            </label>
+                        </div>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="settings-sms-alerts" checked>
+                            <label class="form-check-label text-light small" for="settings-sms-alerts">
+                                <b>SMS Notifications</b> (Twilio SMS Gateway) &mdash; <span class="text-muted">{{ user.phone_number }}</span>
+                            </label>
+                        </div>
+
+                        <button type="button" class="btn btn-primary btn-sm" onclick="saveSettings()">Save Preferences</button>
+                        <span id="settings-status" class="ms-3 text-success d-none"><i class="fa-solid fa-check"></i> Saved successfully</span>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Test Notification Card -->
+            <div class="card border-0 mb-4" style="background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.25) !important;">
+                <div class="card-header py-2" style="background:rgba(249,115,22,0.12);border-bottom:1px solid rgba(249,115,22,0.25);">
+                    <h6 class="mb-0 text-warning d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <span>Twilio Alert Verification &amp; Testing</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="small text-light mb-2">
+                        Test your connection to Twilio SMS and Twilio SendGrid. A test alert containing real-time HeatSense metrics (location, temperature, CHI, HHRI, and precautions) will be dispatched <b>exclusively to your registered phone and email</b>.
+                    </p>
+                    <div class="d-flex align-items-center gap-3 flex-wrap mb-3">
+                        <div class="badge bg-dark border border-secondary text-light p-2">
+                            <i class="fa-solid fa-mobile-screen text-warning me-1"></i> Phone: <b>{{ user.phone_number or 'Not set' }}</b>
+                        </div>
+                        <div class="badge bg-dark border border-secondary text-light p-2">
+                            <i class="fa-solid fa-envelope text-warning me-1"></i> Email: <b>{{ user.email or 'Not set' }}</b>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-warning btn-sm fw-semibold text-white d-flex align-items-center gap-2" id="btn-send-test-notification" onclick="triggerTestNotification('settings')">
+                        <i class="fa-solid fa-vial"></i>
+                        <span>Send Test Notification</span>
+                    </button>
+                    <div id="settings-test-result" class="mt-3 p-3 rounded small d-none" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);line-height:1.6;"></div>
+                </div>
+            </div>
+            
+            <div class="card border-0 border-danger mb-4" style="background: rgba(239, 68, 68, 0.05);">
+                <div class="card-header py-2 border-danger"><h6 class="mb-0 text-danger">Account Actions</h6></div>
+                <div class="card-body">
+                    <p class="text-muted small">Sign out of your HeatSense account securely.</p>
+                    <a href="/logout" class="btn btn-outline-danger"><i class="fa-solid fa-arrow-right-from-bracket me-2"></i>Sign Out</a>
+                </div>
             </div>
         </div>
     </div>

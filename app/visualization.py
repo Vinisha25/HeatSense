@@ -8,7 +8,7 @@ import os
 import json
 import tempfile
 
-def generate_geemap_html(start_date="2024-03-01", end_date="2024-05-31",
+def generate_geemap_html(start_date=None, end_date=None,
                          lat=14.5, lon=75.7, radius_km=15, mode="full"):
     """
     Creates an interactive Leaflet/Folium map.
@@ -21,13 +21,14 @@ def generate_geemap_html(start_date="2024-03-01", end_date="2024-05-31",
         initialize_earth_engine,
         process_landsat_data, get_lulc_data, get_era5_land_daily_climate,
         calculate_composite_heat_index, classify_heat_hotspots,
-        _EE_INITIALIZED
+        get_water_mask,
     )
+    import app.preprocessing as _prep
 
-    if not _EE_INITIALIZED:
+    if not _prep._EE_INITIALIZED:
         initialize_earth_engine()
 
-    if _EE_INITIALIZED:
+    if _prep._EE_INITIALIZED:
         try:
             import ee
 
@@ -73,15 +74,9 @@ def generate_geemap_html(start_date="2024-03-01", end_date="2024-05-31",
                     print(f"[Visualization] Layer '{layer_name}' skipped: {layer_err}")
 
             if mode == 'full':
-                # ── 1. Water / Ocean Bodies ──────────────────────────────────────────
                 lulc = get_lulc_data(region)
-                water_mask = lulc.eq(80)
-                water_vis_img = water_mask.selfMask().clip(region)
-                water_viz = {'min': 0, 'max': 1, 'palette': ['#1a6eb5']}
-                add_ee_tile(water_vis_img, water_viz,
-                            'Ocean / Water Bodies', show=False, opacity=0.75)
 
-                # ── 2. Landsat 8+9 Composite (LST, NDVI, NDBI) ──────────────────────
+                # ── 1. Landsat 8+9 Composite (LST, NDVI, NDBI) ──────────────────────
                 landsat_comp = process_landsat_data(start_date, end_date, region)
 
                 lst_viz = {'bands': ['LST'], 'min': 20.0, 'max': 45.0,
@@ -151,21 +146,11 @@ def generate_geemap_html(start_date="2024-03-01", end_date="2024-05-31",
             )
 
             # ── Water Bodies Overlay (always on top, rendered in blue) ────────────
-            # Load LULC and ESA permanent water to mask coastal/ocean pixels blue
-            lulc_water = get_lulc_data(region)
-            # ESA WorldCover class 80 = Permanent Water Bodies
-            water_mask = lulc_water.eq(80)
-            # JRC Global Surface Water adds river/lake pixels
-            try:
-                jrc_water = ee.Image('JRC/GSW1_4/GlobalSurfaceWater').select('occurrence') \
-                    .gte(70).clip(region)
-                combined_water = water_mask.Or(jrc_water)
-            except Exception:
-                combined_water = water_mask
-
+            # Permanent water bodies (ESA WorldCover class 80 + JRC Global Surface Water)
+            water_mask = get_water_mask(region)
             water_viz = {'min': 0, 'max': 1, 'palette': ['#1a6eb5']}
             add_ee_tile(
-                combined_water.selfMask().clip(region),
+                water_mask.selfMask().clip(region),
                 water_viz,
                 'Water Bodies (Ocean / Rivers / Lakes)',
                 show=True, opacity=0.85
@@ -368,7 +353,7 @@ def _generate_folium_fallback_map(lat, lon, radius_km=15):
 
 
 def generate_before_after_maps(lat, lon, radius_km, strategy_key, before_features, after_features,
-                                 start_date='2024-03-01', end_date='2024-05-31'):
+                                 start_date=None, end_date=None):
     """
     Generates two Folium maps — Before mitigation and After mitigation —
     for the Before & After comparison swipe panel.
@@ -414,7 +399,8 @@ def generate_before_after_maps(lat, lon, radius_km, strategy_key, before_feature
     try:
         from app.preprocessing import (
             _EE_INITIALIZED, initialize_earth_engine,
-            calculate_composite_heat_index, get_lulc_data
+            calculate_composite_heat_index, get_lulc_data,
+            get_water_mask,
         )
         if not _EE_INITIALIZED:
             initialize_earth_engine()
@@ -424,20 +410,13 @@ def generate_before_after_maps(lat, lon, radius_km, strategy_key, before_feature
         region = point.buffer(radius_km * 1000)
 
         # Water Bodies (Ocean / Rivers / Lakes) in blue
-        lulc_water = get_lulc_data(region)
-        water_mask = lulc_water.eq(80)
-        try:
-            jrc_water = ee.Image('JRC/GSW1_4/GlobalSurfaceWater').select('occurrence').gte(70).clip(region)
-            combined_water = water_mask.Or(jrc_water)
-        except Exception:
-            combined_water = water_mask
-
+        water_mask = get_water_mask(region)
         water_viz = {'min': 0, 'max': 1, 'palette': ['#1a6eb5']}
-        water_map_id = combined_water.selfMask().clip(region).getMapId(water_viz)
+        water_map_id = water_mask.selfMask().clip(region).getMapId(water_viz)
         gee_water_tile = water_map_id['tile_fetcher'].url_format
 
         chi_img = calculate_composite_heat_index(start_date, end_date, region)
-        chi_mitigated_img = chi_img.subtract(chi_delta).clamp(0.0, 1.0)
+        chi_mitigated_img = chi_img.subtract(chi_delta).clamp(0.0, 1.0).updateMask(water_mask.eq(0))
 
         # EXACT SAME CHI COLOR PALETTE FOR BOTH SIDES
         chi_viz = {
