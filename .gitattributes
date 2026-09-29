@@ -1,0 +1,12 @@
+# Auto-detect text files and perform LF normalization
+* text=auto
+
+# Ensure markdown files are always treated as text with LF
+*.md text eol=lf
+*.py text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.csv text eol=lf
