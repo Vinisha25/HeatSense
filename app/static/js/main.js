@@ -1524,27 +1524,15 @@
         .then(data => {
             let html = '';
             if (data.success) {
+                html += `<div style="font-size:0.75rem;color:#fed7aa;margin-bottom:6px;"><b>Notice:</b> Demo: sends to one verified recipient only.</div>`;
                 html += `<div style="color:#10b981;font-weight:bold;margin-bottom:6px;"><i class="fa-solid fa-check-circle me-1"></i> Test Alert Dispatched to Logged-in User: ${data.recipient_user}</div>`;
-                const sms = data.results?.sms;
-                const em  = data.results?.email;
+                const tg  = data.results?.telegram;
 
-                if (sms) {
-                    if (sms.success) {
-                        html += `<div style="color:#10b981;"><b>✓ Twilio SMS Sent:</b> SID <code>${sms.sid}</code> (${data.recipient_phone})</div>`;
-                    } else if (sms.skipped) {
-                        html += `<div style="color:#eab308;"><b>⚠️ Twilio SMS Skipped:</b> ${sms.reason}</div>`;
+                if (tg) {
+                    if (tg.success) {
+                        html += `<div style="color:#10b981;"><b>✓ Telegram Sent:</b> @HeatSense_HealthBot (msg_id: ${tg.message_id})</div>`;
                     } else {
-                        html += `<div style="color:#f87171;"><b>✗ Twilio SMS Error:</b> ${sms.error}</div>`;
-                    }
-                }
-
-                if (em) {
-                    if (em.success) {
-                        html += `<div style="color:#10b981;"><b>✓ Email Delivered:</b> ${em.provider || 'Twilio SendGrid'} to ${em.recipient || data.recipient_email}</div>`;
-                    } else if (em.skipped) {
-                        html += `<div style="color:#eab308;"><b>⚠️ Email Skipped:</b> ${em.reason}</div>`;
-                    } else {
-                        html += `<div style="color:#f87171;"><b>✗ Email Error:</b> ${em.error}</div>`;
+                        html += `<div style="color:#f87171;"><b>✗ Telegram Error:</b> ${tg.error}</div>`;
                     }
                 }
             } else {

@@ -339,12 +339,15 @@ def generate_alerts_for_all_districts(app):
 
 def dispatch_alerts(district_name: str, risk_level: str, advisory: str, hhri: float = None, to_phone: str = None, to_email: str = None):
     """
-    Dispatches UHI heat alerts via Twilio SMS and Email notification gateways
+    Dispatches UHI heat alerts via Email and Telegram notification gateways
     only to the specified registered recipient. No hardcoded emails or numbers.
     """
     import logging
     logger = logging.getLogger("heatsense.alerts")
-    sms_msg = f"[SMS ALERT] HeatSense WARNING: {district_name} is under {risk_level} heat hazard! {advisory[:80]}..."
+    sms_msg = (
+        f"HeatSense High-Heat Alert: High heat conditions are reported in {district_name}. "
+        f"Please stay hydrated, avoid strenuous outdoor activity during peak heat, and follow local advisories."
+    )
     logger.info(sms_msg)
 
     if not to_phone and not to_email:

@@ -1,6 +1,6 @@
 """
 HeatSense Notification & Alert Dispatch Service
-Integrated with Twilio SMS Gateway and Twilio SendGrid / SMTP for Email.
+Integrated with SMTP for Email and Telegram for instant messaging.
 """
 
 import os
@@ -13,206 +13,65 @@ import requests
 
 logger = logging.getLogger("heatsense.notifications")
 
-# Twilio Configuration
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "AC3961e69cdfc31034b99b5bc534f371e7").strip()
-TWILIO_AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN", "ee39782023801fb66cf69a07760d8350").strip()
-TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", "+17372508034").strip()
-
-# Email Configuration
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "").strip()
+# Email Configuration (SMTP)
 ALERT_EMAIL_FROM = os.getenv("ALERT_EMAIL_FROM", "alerts@heatsense.org").strip()
-SMTP_SERVER      = os.getenv("SMTP_SERVER", "smtp.sendgrid.net").strip()
+SMTP_SERVER      = os.getenv("SMTP_SERVER", "").strip()
 SMTP_PORT        = int(os.getenv("SMTP_PORT", 587))
 SMTP_USER        = os.getenv("SMTP_USER", "").strip()
 SMTP_PASSWORD    = os.getenv("SMTP_PASSWORD", "").strip()
 
+# Telegram Bot Configuration
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
-def format_phone_number(phone: str, default_country_code: str = "+91") -> str:
+
+def send_telegram_message(message: str, chat_id: str = None, parse_mode: str = "HTML") -> dict:
     """
-    Cleans and standardizes phone number into E.164 format (+91XXXXXXXXXX).
-    Defaults to Indian country code (+91) if 10 digits provided.
-    """
-    if not phone:
-        return ""
-    # Strip spaces, dashes, parentheses
-    cleaned = re.sub(r'[\s\-\(\)]', '', str(phone).strip())
-    if cleaned.startswith("+"):
-        return cleaned
-    if cleaned.startswith("00"):
-        return "+" + cleaned[2:]
-    if cleaned.startswith("0") and len(cleaned) == 11:
-        return default_country_code + cleaned[1:]
-    if len(cleaned) == 10 and cleaned.isdigit():
-        return default_country_code + cleaned
-    return default_country_code + cleaned if not cleaned.startswith("+") else cleaned
+    Sends a Telegram message via the HeatSense Bot (@HeatSense_HealthBot).
 
-
-def get_active_twilio_number() -> str:
-    """
-    Returns TWILIO_PHONE_NUMBER from env, or queries Twilio API
-    to auto-detect any provisioned incoming number.
-    """
-    global TWILIO_PHONE_NUMBER
-    if TWILIO_PHONE_NUMBER:
-        return TWILIO_PHONE_NUMBER
-
-    try:
-        from twilio.rest import Client
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        numbers = client.incoming_phone_numbers.list(limit=1)
-        if numbers:
-            TWILIO_PHONE_NUMBER = numbers[0].phone_number
-            return TWILIO_PHONE_NUMBER
-    except Exception as e:
-        logger.warning(f"Could not auto-detect Twilio phone number: {e}")
-
-    return ""
-
-
-def send_twilio_sms(to_phone: str, message_body: str) -> dict:
-    """
-    Sends an SMS notification via Twilio REST API.
-    
     Returns:
-        dict: {'success': bool, 'sid': str, 'status': str, 'error': str}
+        dict: {'success': bool, 'message_id': int, 'error': str}
     """
-    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
-        return {
-            'success': False,
-            'error': 'Twilio Account SID or Auth Token is not configured.'
-        }
+    token = os.getenv("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN).strip()
+    target_chat = (chat_id or os.getenv("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID)).strip()
 
-    formatted_to = format_phone_number(to_phone)
-    if not formatted_to or len(formatted_to) < 8:
-        return {
-            'success': False,
-            'error': f"Invalid recipient phone number '{to_phone}'. Must be a valid phone number."
-        }
+    if not token:
+        return {'success': False, 'error': 'TELEGRAM_BOT_TOKEN is not configured in .env'}
+    if not target_chat:
+        return {'success': False, 'error': 'TELEGRAM_CHAT_ID is not configured in .env'}
 
-    from_number = get_active_twilio_number()
-    if not from_number:
-        err_msg = (
-            "No Twilio phone number is provisioned for this account. "
-            "Please go to the Twilio Console (console.twilio.com), click 'Get a Phone Number', "
-            "and set TWILIO_PHONE_NUMBER in your .env file."
-        )
-        logger.warning(f"[Twilio SMS Error] {err_msg}")
-        return {
-            'success': False,
-            'error': err_msg,
-            'action_needed': 'get_twilio_number'
-        }
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": target_chat,
+        "text": message,
+        "parse_mode": parse_mode,
+    }
 
     try:
-        from twilio.rest import Client
-        from twilio.base.exceptions import TwilioRestException
-
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        msg = client.messages.create(
-            body=message_body,
-            from_=from_number,
-            to=formatted_to
-        )
-        logger.info(f"[Twilio SMS Sent] SID={msg.sid} To={formatted_to} Status={msg.status}")
-        return {
-            'success': True,
-            'sid': msg.sid,
-            'status': msg.status,
-            'to': formatted_to,
-            'from': from_number
-        }
-    except TwilioRestException as tre:
-        logger.error(f"[Twilio REST Error] Code={tre.code}: {tre.msg}")
-        # If Twilio trial account requires predefined templates for Indian numbers (+91)
-        if "predefined SMS templates" in tre.msg or "Invalid template name" in tre.msg:
-            logger.info("[Twilio Trial Policy] Retrying via pre-approved trial template 'sms_account_alerts' for destination...")
-            try:
-                msg = client.messages.create(
-                    body='sms_account_alerts',
-                    from_=from_number,
-                    to=formatted_to
-                )
-                logger.info(f"[Twilio SMS Sent via Template] SID={msg.sid} To={formatted_to}")
-                return {
-                    'success': True,
-                    'sid': msg.sid,
-                    'status': msg.status,
-                    'to': formatted_to,
-                    'from': from_number,
-                    'trial_template_used': True,
-                    'heat_alert_body': message_body,
-                    'note': 'Twilio Trial Account delivered via pre-approved template for India (+91). Full heat advisory is recorded and sent via Email.'
-                }
-            except Exception as retry_err:
-                logger.error(f"[Twilio Trial Template Fallback Error] {retry_err}")
-                return {
-                    'success': False,
-                    'error': f"Twilio Trial Template failed: {retry_err}"
-                }
-
-        # Friendly error messages for common trial issues
-        msg = tre.msg
-        if tre.code == 21608:
-            msg = f"Twilio Trial Account requires recipient {formatted_to} to be verified first under 'Verified Caller IDs' in Twilio Console."
-        elif tre.code == 21211:
-            msg = f"Invalid 'To' phone number: {formatted_to}."
-        elif tre.code == 21606:
-            msg = f"The 'From' phone number {from_number} is not a valid SMS-capable Twilio number."
-        return {
-            'success': False,
-            'code': tre.code,
-            'error': msg
-        }
+        resp = requests.post(url, json=payload, timeout=10)
+        data = resp.json()
+        if data.get("ok"):
+            msg_id = data["result"]["message_id"]
+            logger.info(f"[Telegram Sent] message_id={msg_id} chat_id={target_chat}")
+            return {'success': True, 'message_id': msg_id, 'chat_id': target_chat}
+        else:
+            err = data.get("description", "Unknown Telegram API error")
+            logger.error(f"[Telegram Error] {err}")
+            return {'success': False, 'error': err}
     except Exception as e:
-        logger.error(f"[Twilio SMS Exception] {e}")
-        return {
-            'success': False,
-            'error': str(e)
-        }
+        logger.error(f"[Telegram Exception] {e}")
+        return {'success': False, 'error': str(e)}
 
 
 def send_alert_email(to_email: str, subject: str, text_content: str, html_content: str = None) -> dict:
     """
-    Dispatches an Email alert via Twilio SendGrid API or SMTP.
-    Prefers Twilio SendGrid API when SENDGRID_API_KEY is configured.
+    Dispatches an Email alert via SMTP if credentials are configured in .env.
     """
     to_email = (to_email or "").strip()
     if not to_email or "@" not in to_email:
         return {'success': False, 'error': f"Invalid recipient email: '{to_email}'"}
 
-    sendgrid_key = os.getenv("SENDGRID_API_KEY", SENDGRID_API_KEY).strip()
     from_email = os.getenv("ALERT_EMAIL_FROM", ALERT_EMAIL_FROM).strip() or "alerts@heatsense.org"
-
-    # 1. Try Twilio SendGrid REST API if key is present
-    if sendgrid_key:
-        try:
-            headers = {
-                "Authorization": f"Bearer {sendgrid_key}",
-                "Content-Type": "application/json"
-            }
-            content_list = [{"type": "text/plain", "value": text_content}]
-            if html_content:
-                content_list.append({"type": "text/html", "value": html_content})
-
-            payload = {
-                "personalizations": [{"to": [{"email": to_email}]}],
-                "from": {"email": from_email, "name": "HeatSense Monitoring"},
-                "subject": subject,
-                "content": content_list
-            }
-            resp = requests.post("https://api.sendgrid.com/v3/mail/send", json=payload, headers=headers, timeout=10)
-            if resp.status_code in (200, 201, 202):
-                logger.info(f"[Twilio SendGrid Sent] To={to_email} Subject={subject}")
-                return {'success': True, 'provider': 'Twilio SendGrid API', 'status': resp.status_code, 'recipient': to_email}
-            else:
-                logger.warning(f"[Twilio SendGrid Error] Status={resp.status_code}: {resp.text}")
-                # If SendGrid fails with error, return detailed error
-                return {'success': False, 'error': f"Twilio SendGrid API returned HTTP {resp.status_code}: {resp.text}", 'provider': 'Twilio SendGrid API'}
-        except Exception as e:
-            logger.error(f"[Twilio SendGrid Exception] {e}")
-            return {'success': False, 'error': f"Twilio SendGrid dispatch error: {str(e)}", 'provider': 'Twilio SendGrid API'}
-
-    # 2. Try SMTP if credentials provided in .env
     smtp_server = os.getenv("SMTP_SERVER", "").strip()
     smtp_user = os.getenv("SMTP_USER", "").strip()
     smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
@@ -242,15 +101,10 @@ def send_alert_email(to_email: str, subject: str, text_content: str, html_conten
             logger.error(f"[SMTP Error] {e}")
             return {'success': False, 'error': f"SMTP dispatch failed: {str(e)}"}
 
-    # 3. Fallback: Log email details cleanly
-    logger.info(f"[Email Queued/Logged] To: {to_email} | Subject: {subject}")
     return {
-        'success': True,
-        'simulated': True,
-        'note': 'Logged alert. Set SENDGRID_API_KEY in .env for direct live Twilio SendGrid delivery.',
-        'recipient': to_email,
-        'subject': subject,
-        'provider': 'Twilio SendGrid (Simulated/Ready)'
+        'success': False,
+        'skipped': True,
+        'reason': 'No SMTP email service configured'
     }
 
 
@@ -270,8 +124,7 @@ def dispatch_heat_alert(
 ) -> dict:
     """
     Formats and dispatches customized HeatSense health risk alerts across
-    both Twilio SMS and Twilio SendGrid email for the registered user.
-    Respects user's SMS and Email notification preferences.
+    Telegram and Email for the registered user.
     """
     results = {}
 
@@ -316,17 +169,13 @@ def dispatch_heat_alert(
     tag = "[TEST NOTIFICATION] " if is_test else ""
     risk_color = '#ef4444' if risk_level in ('Very High', 'Severe') else ('#f97316' if risk_level == 'High' else '#f59e0b')
 
-    # ── 1. Twilio SMS Message (Customized with actual HeatSense data) ──────
+    # ── 1. Alert Text ─────────────────────────────────────────────────────
     sms_text = (
-        f"{tag}🌡️ HeatSense Alert: {risk_level} Heat Risk\n"
-        f"Location: {district_or_location}\n"
-        f"{metrics_line}\n"
-        f"Advisory: {advisory[:80]}...\n"
-        f"Precautions: Stay indoors 11AM-4PM, hydrate (3L+), check vulnerable persons.\n"
-        f"Emergency: 104 (Health) | 108 (Ambulance)"
+        f"HeatSense High-Heat Alert: High heat conditions are reported in {district_or_location}. "
+        f"Please stay hydrated, avoid strenuous outdoor activity during peak heat, and follow local advisories."
     )
 
-    # ── 2. Email Subject & Body (Twilio SendGrid) ─────────────────────────
+    # ── 2. Email Subject & Body ───────────────────────────────────────────
     email_subject = (
         f"{tag}🌡️ HeatSense Alert: {risk_level} Heat-Health Risk in {district_or_location}"
         f" ({metrics_line})"
@@ -389,20 +238,11 @@ def dispatch_heat_alert(
         "</div></div>"
         "<div style=\"background:#0f172a;padding:14px;text-align:center;"
         "font-size:11.5px;color:#64748b;border-top:1px solid rgba(255,255,255,0.06);\">"
-        "Delivered securely to your registered account by HeatSense &bull; Powered by Twilio &amp; Twilio SendGrid"
+        "Delivered securely to your registered account by HeatSense Automated Monitoring Platform"
         "</div></div>"
     )
 
-    # ── 3. Send SMS via Twilio (if phone provided & user enabled SMS) ───────
-    if to_phone:
-        if sms_enabled:
-            results['sms'] = send_twilio_sms(to_phone, sms_text)
-        else:
-            results['sms'] = {'success': False, 'skipped': True, 'reason': 'SMS alerts disabled in your notification settings'}
-    else:
-        results['sms'] = {'success': False, 'skipped': True, 'reason': 'No phone number registered in database'}
-
-    # ── 4. Send Email via Twilio SendGrid (if email provided & user enabled)
+    # ── 3. Send Email (if email provided & user enabled)
     if to_email:
         if email_enabled:
             results['email'] = send_alert_email(to_email, email_subject, email_text, email_html)
@@ -410,6 +250,23 @@ def dispatch_heat_alert(
             results['email'] = {'success': False, 'skipped': True, 'reason': 'Email alerts disabled in your notification settings'}
     else:
         results['email'] = {'success': False, 'skipped': True, 'reason': 'No email address registered in database'}
+
+    # ── 5. Send Telegram message via @HeatSense_HealthBot ─────────────────
+    risk_emoji = '🔴' if risk_level in ('Very High', 'Severe') else ('🟠' if risk_level == 'High' else '🟡')
+    test_tag   = '🧪 <b>[TEST]</b>\n' if is_test else ''
+    tg_message = (
+        f"{test_tag}"
+        f"{risk_emoji} <b>HeatSense Heat-Health Alert</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📍 <b>Location:</b> {district_or_location}\n"
+        f"⚠️ <b>Risk Level:</b> {risk_level}\n"
+        f"🌡️ <b>Metrics:</b> {metrics_line}\n\n"
+        f"📋 <b>Advisory:</b>\n{advisory}\n\n"
+        f"🛡️ <b>Stay Safe:</b>\n"
+        + "\n".join(f"• {p}" for p in (precautions or [])[:3]) +
+        f"\n\n🚨 <b>Emergency:</b> Ambulance 108 | Health 104 | Disaster 1070"
+    )
+    results['telegram'] = send_telegram_message(tg_message)
 
     return results
 
@@ -424,21 +281,10 @@ def send_custom_alert(
     email_enabled: bool = True,
 ) -> dict:
     """
-    Send a custom alert to the registered user.
-    SMS: sends sms_text via Twilio SMS.
-    Email: sends via Twilio SendGrid wrapped in HeatSense template.
+    Send a custom alert to the registered user via Telegram.
     Respects user notification settings.
     """
     results = {}
-
-    # SMS
-    if to_phone:
-        if sms_enabled:
-            results['sms'] = send_twilio_sms(to_phone, sms_text)
-        else:
-            results['sms'] = {'success': False, 'skipped': True, 'reason': 'SMS alerts disabled in your notification settings'}
-    else:
-        results['sms'] = {'success': False, 'skipped': True, 'reason': 'No phone number registered in database'}
 
     # Email
     if to_email:
@@ -461,7 +307,7 @@ def send_custom_alert(
                 f'{body_html_safe}</div></div>'
                 '<div style="background:#0f172a;padding:14px;text-align:center;'
                 'font-size:11px;color:#64748b;">'
-                'HeatSense Monitoring Platform &bull; Delivered via Twilio SendGrid'
+                'HeatSense Monitoring Platform'
                 '</div></div>'
             )
 
@@ -472,5 +318,11 @@ def send_custom_alert(
             results['email'] = {'success': False, 'skipped': True, 'reason': 'Email alerts disabled in your notification settings'}
     else:
         results['email'] = {'success': False, 'skipped': True, 'reason': 'No email address registered in database'}
+
+    # Telegram
+    tg_body = (sms_text or email_body or '').strip()
+    results['telegram'] = send_telegram_message(
+        f"🌡️ <b>HeatSense Alert</b>\n\n{tg_body}"
+    )
 
     return results

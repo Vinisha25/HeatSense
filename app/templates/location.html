@@ -355,6 +355,34 @@
         .leaflet-popup-tip { background: rgba(15,15,15,0.97) !important; }
         .leaflet-popup-close-button { color: rgba(255,255,255,0.5) !important; }
 
+        /* Leaflet layer control customization */
+        .leaflet-control-layers {
+            background: rgba(14, 18, 26, 0.94) !important;
+            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            border-radius: 10px !important;
+            color: #f8fafc !important;
+            font-family: 'Inter', sans-serif !important;
+            font-size: 0.8rem !important;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55) !important;
+            backdrop-filter: blur(10px);
+            padding: 6px !important;
+        }
+        .leaflet-control-layers-expanded {
+            padding: 10px 14px !important;
+        }
+        .leaflet-control-layers-base label {
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+        .leaflet-control-layers-base label:hover {
+            color: #f97316;
+        }
+
         /* Status bar */
         .sidebar-status {
             padding: 0.75rem 1.5rem;
@@ -543,16 +571,34 @@
             zoomControl: true,
         });
 
-        // Premium dark tile layer (ArcGIS World Dark Gray Canvas — No API key required)
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
-            maxZoom: 18
-        }).addTo(map);
+        // 🛰️ High-Resolution Satellite Imagery (Esri World Imagery)
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, &copy; OpenStreetMap contributors',
+            maxZoom: 19
+        });
 
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Esri',
-            maxZoom: 18
-        }).addTo(map);
+        // 🏷️ Reference Boundaries, Roads & Place Names (OpenStreetMap / Esri Places Overlay)
+        const labelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Esri, &copy; OpenStreetMap contributors',
+            maxZoom: 19
+        });
+
+        // 🗺️ Standard OpenStreetMap Layer
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        });
+
+        // Composite Satellite + OpenStreetMap hybrid as default active basemap
+        const satelliteHybrid = L.layerGroup([satelliteLayer, labelsLayer]);
+        satelliteHybrid.addTo(map);
+
+        // Layer Switcher Control (Satellite Hybrid & OpenStreetMap Standard)
+        const baseMaps = {
+            "🛰️ Satellite (OpenStreetMap)": satelliteHybrid,
+            "🗺️ OpenStreetMap Standard": osmLayer
+        };
+        L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
         // Custom orange marker
         const orangeIcon = L.divIcon({

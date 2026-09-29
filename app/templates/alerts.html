@@ -16,19 +16,24 @@
                 </p>
             </div>
         </div>
-        <div class="col-md-auto mt-3 mt-md-0 d-flex gap-2">
-            <button class="btn btn-outline-warning d-flex align-items-center gap-2 fw-semibold shadow-sm text-white"
-                    style="background:rgba(249,115,22,0.15);border:1px solid #f97316;border-radius:10px;padding:0.65rem 1.25rem;"
-                    id="btn-alerts-test-header" onclick="triggerAlertsTestNotification()">
-                <i class="fa-solid fa-vial text-warning"></i>
-                <span>Send Test Notification</span>
-            </button>
-            <button class="btn btn-warning d-flex align-items-center gap-2 fw-semibold shadow-sm text-white"
-                    style="background: linear-gradient(135deg, #f97316, #ea580c); border:none; padding:0.65rem 1.25rem; border-radius:10px; cursor:pointer;"
-                    data-bs-toggle="modal" data-bs-target="#twilioDispatchModal">
-                <i class="fa-solid fa-paper-plane"></i>
-                <span>Dispatch Alert</span>
-            </button>
+        <div class="col-md-auto mt-3 mt-md-0 d-flex flex-column align-items-md-end gap-1">
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-warning d-flex align-items-center gap-2 fw-semibold shadow-sm text-white"
+                        style="background:rgba(249,115,22,0.15);border:1px solid #f97316;border-radius:10px;padding:0.65rem 1.25rem;"
+                        id="btn-alerts-test-header" onclick="triggerAlertsTestNotification()">
+                    <i class="fa-solid fa-vial text-warning"></i>
+                    <span>Send Test Notification</span>
+                </button>
+                <button class="btn btn-warning d-flex align-items-center gap-2 fw-semibold shadow-sm text-white"
+                        style="background: linear-gradient(135deg, #f97316, #ea580c); border:none; padding:0.65rem 1.25rem; border-radius:10px; cursor:pointer;"
+                        data-bs-toggle="modal" data-bs-target="#dispatchModal">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>Dispatch Alert</span>
+                </button>
+            </div>
+            <div class="text-warning fw-semibold mt-1" style="font-size:0.75rem;">
+                <i class="fa-solid fa-shield-halved me-1"></i>Demo: sends to one verified recipient only.
+            </div>
         </div>
     </div>
 
@@ -348,22 +353,34 @@
                             <td><strong>BBMP Heat Helpline:</strong></td>
                             <td class="text-primary fw-bold">080-22221188</td>
                         </tr>
-                        <tr>
-       <!-- ── Alert Dispatch Modal ──────────────────────────────────────── -->
-<div class="modal fade" id="twilioDispatchModal" tabindex="-1" aria-labelledby="twilioDispatchModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Alert Dispatch Modal ──────────────────────────────────────── -->
+<div class="modal fade" id="dispatchModal" tabindex="-1" aria-labelledby="dispatchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
         <div class="modal-content" style="background:var(--bg-card, #161b22);border:1px solid rgba(249,115,22,0.3);border-radius:14px;color:#f3f4f6;">
             <div class="modal-header" style="border-bottom:1px solid rgba(255,255,255,0.08);background:linear-gradient(135deg,#1f130a 0%,#2d1808 100%);">
                 <div class="d-flex align-items-center gap-2">
                     <span style="font-size:1.4rem;">&#x1F6A8;</span>
                     <div>
-                        <h5 class="modal-title fw-bold text-white mb-0" id="twilioDispatchModalLabel">Dispatch Heat Health Alert</h5>
-                        <small style="color:#f97316;font-size:0.75rem;">Twilio SMS Gateway &bull; Twilio SendGrid Email &bull; Logged-in Account Only</small>
+                        <h5 class="modal-title fw-bold text-white mb-0" id="dispatchModalLabel">Dispatch Heat Health Alert</h5>
+                        <small style="color:#f97316;font-size:0.75rem;">Telegram &bull; Logged-in Account Only</small>
                     </div>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
+                <!-- Prominent Demo Notice Banner -->
+                <div class="alert alert-warning py-2 px-3 mb-3 d-flex align-items-center gap-2 fw-semibold" style="background:rgba(249,115,22,0.18);border:1.5px solid #f97316;border-radius:8px;color:#fed7aa;font-size:0.85rem;">
+                    <i class="fa-solid fa-triangle-exclamation text-warning fs-5"></i>
+                    <span>Demo: sends to one verified recipient only.</span>
+                </div>
+
                 <!-- Logged-in Recipient Info Box (Direct Database Source) -->
                 <div class="p-3 mb-3 rounded" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);">
                     <div class="d-flex justify-content-between align-items-center mb-1">
@@ -376,7 +393,7 @@
                         <span class="text-info"><i class="fa-solid fa-envelope ms-1 me-1"></i>{{ session.user.email if session.user and session.user.email else 'No email registered' }}</span>
                     </div>
                     <div class="small text-muted mt-1" style="font-size:0.75rem;">
-                        Notifications are dispatched <b>ONLY to your registered phone and email</b> stored in the database.
+                        <b>Demo: sends to one verified recipient only.</b> This test alert will not be sent to all HeatSense users.
                     </div>
                 </div>
 
@@ -394,17 +411,21 @@
                     </button>
                 </div>
 
-                <form id="twilio-dispatch-form" onsubmit="submitTwilioAlert(event)">
+                <form id="dispatch-form" onsubmit="submitDispatchAlert(event)">
 
                     <!-- AUTO MODE -->
                     <div id="section-auto">
                         <div class="mb-3">
-                            <label class="form-label text-muted small fw-semibold">Target District / Location</label>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label text-muted small fw-semibold mb-0">Target District / Location</label>
+                                <span class="badge" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.4);font-size:0.72rem;">
+                                    <i class="fa-solid fa-fire me-1"></i>High-Alert Area: <b>{{ high_alert_area }}</b>
+                                </span>
+                            </div>
                             <select class="form-select text-white" id="dispatch-location" style="background:#0f172a;border-color:rgba(255,255,255,0.15);" onchange="onDispatchDistrictChange(this.value)">
                                 {% for d in district_risk_cards %}
-                                <option value="{{ d.name }}" data-risk="{{ d.risk_level }}" data-hhri="{{ d.hhri }}" data-advisory="{{ d.advisory }}">{{ d.name }} ({{ d.risk_level }} &bull; HHRI {{ "%.3f"|format(d.hhri) }})</option>
+                                <option value="{{ d.name }}" data-risk="{{ d.risk_level }}" data-hhri="{{ d.hhri }}" data-advisory="{{ d.advisory }}" {% if d.name == high_alert_area %}selected{% endif %}>{{ d.name }} ({{ d.risk_level }} &bull; HHRI {{ "%.3f"|format(d.hhri) }})</option>
                                 {% endfor %}
-                                <option value="Bengaluru Urban" data-risk="High" data-hhri="0.72">Bengaluru Urban</option>
                             </select>
                         </div>
                         <div class="row g-2 mb-3">
@@ -428,30 +449,22 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label text-muted small fw-semibold">Advisory / Precaution Text</label>
-                            <textarea class="form-control text-white" id="dispatch-advisory" rows="2" style="background:#0f172a;border-color:rgba(255,255,255,0.15);font-size:0.82rem;">High heat stress detected. Limit outdoor activity during peak hours, hydrate frequently with 3+ litres daily, and assist vulnerable groups.</textarea>
+                            <textarea class="form-control text-white" id="dispatch-advisory" rows="2" style="background:#0f172a;border-color:rgba(255,255,255,0.15);font-size:0.82rem;">High heat conditions are reported. Please stay hydrated, avoid strenuous outdoor activity during peak heat, and follow local advisories.</textarea>
                         </div>
                     </div>
 
                     <!-- CUSTOM MODE -->
                     <div id="section-custom" style="display:none;">
                         <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.78rem;color:#6ee7b7;">
-                            &#x270D;&#xFE0F; <b>Custom message mode:</b> Writes personalized SMS and email directly dispatched to your registered phone and email.
+                            &#x270D;&#xFE0F; <b>Custom message mode:</b> Writes personalized alert directly dispatched to Telegram.
+                            <div class="text-warning fw-semibold mt-1"><b>Demo: sends to one verified recipient only.</b></div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label text-muted small fw-semibold">Email Subject Line (Twilio SendGrid)</label>
+                            <label class="form-label text-muted small fw-semibold">Email Subject Line</label>
                             <input type="text" class="form-control text-white" id="custom-subject"
-                                placeholder="e.g. Urgent Heat Alert for Mangaluru Region"
+                                placeholder="e.g. Urgent Heat Alert"
                                 value="&#x1F321;&#xFE0F; High Heat Health Alert &#x2013; HeatSense"
                                 style="background:#0f172a;border-color:rgba(255,255,255,0.15);">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label text-muted small fw-semibold">SMS Message (Twilio SMS)</label>
-                            <textarea class="form-control text-white" id="custom-sms" rows="3"
-                                style="background:#0f172a;border-color:rgba(255,255,255,0.15);font-size:0.82rem;"
-                                oninput="updateSmsCounter()">HeatSense Alert: High heat detected in your area. Stay indoors 11AM-4PM. Drink 3L water daily. Call 104 (Health) or 108 (Ambulance) if needed.</textarea>
-                            <div style="font-size:0.7rem;color:#64748b;text-align:right;margin-top:2px;">
-                                <span id="sms-char-count">0</span> / 160 chars
-                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label text-muted small fw-semibold">Email Body</label>
@@ -543,6 +556,13 @@ function onDispatchDistrictChange(name) {
         if (opt.dataset.risk) document.getElementById('dispatch-risk').value = opt.dataset.risk;
         if (opt.dataset.hhri) document.getElementById('dispatch-hhri').value = parseFloat(opt.dataset.hhri).toFixed(3);
         if (opt.dataset.advisory) document.getElementById('dispatch-advisory').value = opt.dataset.advisory;
+        
+        // Update custom SMS textarea dynamically with the selected area
+        const smsEl = document.getElementById('custom-sms');
+        if (smsEl) {
+            smsEl.value = `HeatSense High-Heat Alert: High heat conditions are reported in ${name}. Please stay hydrated, avoid strenuous outdoor activity during peak heat, and follow local advisories.`;
+            updateSmsCounter();
+        }
     }
 }
 
@@ -572,34 +592,22 @@ async function triggerAlertsTestNotification() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                location: document.getElementById('dispatch-location')?.value || 'Bengaluru Urban'
+                location: document.getElementById('dispatch-location')?.value || '{{ high_alert_area }}'
             })
         });
         const data = await res.json();
         
         let html = '';
         if (data.success) {
+            html += `<div style="font-size:0.75rem;color:#fed7aa;margin-bottom:6px;"><b>Notice:</b> Demo: sends to one verified recipient only.</div>`;
             html += `<div style="color:#10b981;font-weight:bold;margin-bottom:6px;">✓ Test Alert Dispatched to Logged-in User: ${data.recipient_user}</div>`;
-            const sms = data.results?.sms;
-            const em  = data.results?.email;
+            const tg  = data.results?.telegram;
 
-            if (sms) {
-                if (sms.success) {
-                    html += `<div style="color:#10b981;"><b>✓ Twilio SMS Sent:</b> SID <code>${sms.sid}</code> (${data.recipient_phone})</div>`;
-                } else if (sms.skipped) {
-                    html += `<div style="color:#eab308;"><b>⚠️ Twilio SMS Skipped:</b> ${sms.reason}</div>`;
+            if (tg) {
+                if (tg.success) {
+                    html += `<div style="color:#10b981;"><b>✓ Telegram Sent:</b> @HeatSense_HealthBot (msg_id: ${tg.message_id})</div>`;
                 } else {
-                    html += `<div style="color:#f87171;"><b>✗ Twilio SMS Error:</b> ${sms.error}</div>`;
-                }
-            }
-
-            if (em) {
-                if (em.success) {
-                    html += `<div style="color:#10b981;"><b>✓ Email Delivered:</b> ${em.provider || 'Twilio SendGrid'} to ${em.recipient || data.recipient_email}</div>`;
-                } else if (em.skipped) {
-                    html += `<div style="color:#eab308;"><b>⚠️ Email Skipped:</b> ${em.reason}</div>`;
-                } else {
-                    html += `<div style="color:#f87171;"><b>✗ Email Error:</b> ${em.error}</div>`;
+                    html += `<div style="color:#f87171;"><b>✗ Telegram Error:</b> ${tg.error}</div>`;
                 }
             }
         } else {
@@ -631,7 +639,7 @@ async function triggerAlertsTestNotification() {
 }
 
 // ── Dispatch Alert Handler ───────────────────────────────────────────
-async function submitTwilioAlert(e) {
+async function submitDispatchAlert(e) {
     e.preventDefault();
     const btn = document.getElementById('btn-submit-dispatch');
     const box = document.getElementById('dispatch-result-box');
@@ -675,35 +683,28 @@ async function submitTwilioAlert(e) {
 
         let html = '';
         if (data.success && data.results) {
+            html += `<div style="font-size:0.75rem;color:#fed7aa;margin-bottom:6px;"><b>Notice:</b> Demo: sends to one verified recipient only.</div>`;
             html += `<div style="color:#10b981;font-weight:bold;margin-bottom:6px;">✓ Alert Dispatched to Logged-in Account: ${data.recipient_user}</div>`;
-            const sms = data.results.sms;
-            const em  = data.results.email;
-            if (sms) {
-                if (sms.success) {
-                    html += `<div style="color:#10b981;margin-bottom:4px;"><b>✓ Twilio SMS Sent:</b> SID <code>${sms.sid}</code> (${data.recipient_phone})</div>`;
-                } else if (sms.skipped) {
-                    html += `<div style="color:#eab308;margin-bottom:4px;"><b>⚠️ SMS Skipped:</b> ${sms.reason}</div>`;
+            const tg  = data.results?.telegram;
+            if (tg) {
+                if (tg.success) {
+                    html += `<div style="color:#10b981;margin-bottom:4px;"><b>✓ Telegram Sent:</b> @HeatSense_HealthBot (msg_id: ${tg.message_id})</div>`;
                 } else {
-                    html += `<div style="color:#f87171;margin-bottom:4px;"><b>✗ Twilio SMS Error:</b> ${sms.error}</div>`;
-                }
-            }
-            if (em) {
-                if (em.success) {
-                    html += `<div style="color:#10b981;"><b>✓ Email Delivered:</b> ${em.provider || 'Twilio SendGrid'} to ${em.recipient || data.recipient_email}</div>`;
-                } else if (em.skipped) {
-                    html += `<div style="color:#eab308;"><b>⚠️ Email Skipped:</b> ${em.reason}</div>`;
-                } else {
-                    html += `<div style="color:#f87171;"><b>✗ Email Error:</b> ${em.error}</div>`;
+                    html += `<div style="color:#f87171;margin-bottom:4px;"><b>✗ Telegram Error:</b> ${tg.error}</div>`;
                 }
             }
         } else if (!data.success) {
             html = `<b style="color:#f87171;">✗ Error:</b> ${data.error || 'Unknown error'}`;
         }
 
-        const anySuccess = data.results?.sms?.success || data.results?.email?.success;
+        const anySuccess = data.results?.telegram?.success || data.results?.email?.success;
         box.style.background = anySuccess ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
         box.style.border = `1px solid ${anySuccess ? '#10b981' : 'rgba(239,68,68,0.4)'}`;
         box.innerHTML = html || 'Alert processed.';
+        box.style.display = 'block';
+        // Scroll result into view inside the scrollable modal
+        setTimeout(() => box.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+
     } catch (err) {
         box.style.display = 'block';
         box.style.background = 'rgba(239,68,68,0.15)';

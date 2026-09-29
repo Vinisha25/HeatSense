@@ -75,125 +75,75 @@
     </div>
 
     <!-- Stats ribbon -->
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="stat-card">
-                <div class="stat-label d-flex justify-content-between align-items-center">
-                    <span>📍 Location</span>
-                    <a href="/location" class="badge bg-warning bg-opacity-10 text-warning text-decoration-none border border-warning border-opacity-25" style="font-size:0.72rem;font-weight:600;"><i class="fa-solid fa-location-crosshairs me-1"></i> Exact GPS / Change</a>
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-md-4">
+            <div class="stat-card h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="stat-label d-flex justify-content-between align-items-center mb-1">
+                        <span>📍 Location Detected</span>
+                        <a href="/location" class="badge bg-warning bg-opacity-10 text-warning text-decoration-none border border-warning border-opacity-25" style="font-size:0.72rem;font-weight:600;"><i class="fa-solid fa-location-crosshairs me-1"></i> Exact GPS / Change</a>
+                    </div>
+                    <div class="stat-value text-gradient" id="home-stat-name" style="font-size:1.35rem; line-height:1.2;">{{ location_name }}</div>
                 </div>
-                <div class="stat-value text-gradient" id="home-stat-name" style="font-size:1.1rem;">{{ location_name }}</div>
-                <div class="stat-sub">{{ "%.5f"|format(location_lat) }}°N, {{ "%.5f"|format(location_lon) }}°E</div>
+                <div class="stat-sub mt-2">{{ "%.5f"|format(location_lat) }}°N, {{ "%.5f"|format(location_lon) }}°E</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card" style="border-left:3px solid #ef4444; background:linear-gradient(135deg, rgba(239,68,68,0.06), transparent);">
-                <div class="stat-label">🌡️ Overall Temperature</div>
-                <div class="stat-value" style="color:#ef4444; font-size:1.6rem; font-weight:800;" id="home-overall-temp">—</div>
-                <div class="stat-sub" style="color:#94a3b8;">Feels like <span id="home-feels-like" style="color:#fb923c; font-weight:600;">—</span> · Real-Time Meteorological</div>
+        <div class="col-12 col-md-4">
+            <div class="stat-card h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="stat-label mb-1">🌡️ Overall Temperature</div>
+                    <div class="stat-value" style="color:#ef4444; font-size:1.5rem; font-weight:700; line-height:1.2;" id="home-overall-temp">—</div>
+                </div>
+                <div class="stat-sub mt-2" style="color:#94a3b8;">Feels like <span id="home-feels-like" style="color:#fb923c; font-weight:600;">—</span> · Real-Time Meteorological</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card">
-                <div class="stat-label">Composite Heat Index</div>
-                <div class="stat-value" style="color:var(--orange);" id="home-stat-chi">—</div>
-                <div class="stat-sub">Score [0 – 1]</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card">
-                <div class="stat-label">Risk Level</div>
-                <div class="stat-value" id="home-stat-risk">—</div>
-                <div class="stat-sub" id="home-stat-advisory">Loading...</div>
+        <div class="col-12 col-md-4">
+            <div class="stat-card h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="stat-label mb-1">🛡️ Risk Level</div>
+                    <div class="stat-value" id="home-stat-risk" style="font-size:1.5rem; font-weight:700; line-height:1.2;">—</div>
+                </div>
+                <div class="stat-sub mt-2" id="home-stat-advisory">Loading...</div>
             </div>
         </div>
     </div>
 
     <!-- Temperature breakdown row -->
-    <div class="row g-3 mb-3">
-        <div class="col-6 col-lg-2">
-            <div class="stat-card">
-                <div class="stat-label">🛰️ Surface Temp (LST)</div>
-                <div class="stat-value" style="color:var(--red);" id="home-stat-lst">—</div>
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6">
+            <div class="stat-card h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="stat-label mb-1">🛰️ Surface Temp (LST)</div>
+                    <div class="stat-value" style="color:var(--red); font-size:1.5rem; font-weight:700; line-height:1.2;" id="home-stat-lst">—</div>
+                </div>
+                <div class="stat-sub mt-2">Satellite Land Surface Temp · Moderate Resolution</div>
             </div>
         </div>
-        <div class="col-6 col-lg-2">
-            <div class="stat-card">
-                <div class="stat-label">🌬️ Air Temperature</div>
-                <div class="stat-value" id="home-air-temp">—</div>
-            </div>
-        </div>
-        <div class="col-6 col-lg-2">
-            <div class="stat-card">
-                <div class="stat-label">💧 Humidity</div>
-                <div class="stat-value" id="home-humidity">—</div>
-            </div>
-        </div>
-        <div class="col-6 col-lg-2">
-            <div class="stat-card">
-                <div class="stat-label">🌿 NDVI (Vegetation)</div>
-                <div class="stat-value" style="color:var(--green);" id="home-ndvi">—</div>
-            </div>
-        </div>
-        <div class="col-6 col-lg-2">
-            <div class="stat-card">
-                <div class="stat-label">🏙️ NDBI (Built-up)</div>
-                <div class="stat-value" id="home-ndbi">—</div>
-            </div>
-        </div>
-        <div class="col-6 col-lg-2">
-            <div class="stat-card">
-                <div class="stat-label">💨 Wind Speed</div>
-                <div class="stat-value" id="home-wind">—</div>
+        <div class="col-12 col-md-6">
+            <div class="stat-card h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="stat-label mb-1">🔥 Composite Heat Index</div>
+                    <div class="stat-value" style="color:var(--orange); font-size:1.5rem; font-weight:700; line-height:1.2;" id="home-stat-chi">—</div>
+                </div>
+                <div class="stat-sub mt-2">Combined Environmental &amp; Heat Vulnerability · Score [0 – 1]</div>
             </div>
         </div>
     </div>
 
-    <!-- Map + Quick Info -->
-    <div class="row g-4">
-        <div class="col-lg-8">
-            <div class="card border-0 mb-4">
+    <!-- Spatial Overview Map -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 mb-2">
                 <div class="card-header py-2 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0"><i class="fa-solid fa-map me-2" style="color:var(--orange);"></i>Spatial Overview</h6>
-                    <span class="gee-badge offline" id="map-gee-badge"><span class="dot"></span> <span id="map-gee-text">Basemap</span></span>
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted d-none d-md-inline" id="home-data-source">Data source: loading...</small>
+                        <span class="gee-badge offline" id="map-gee-badge"><span class="dot"></span> <span id="map-gee-text">Basemap</span></span>
+                    </div>
                 </div>
                 <div class="card-body p-0">
-                    <div class="map-frame-container" style="height:400px;">
+                    <div class="map-frame-container" style="height:460px;">
                         <iframe id="home-map-iframe" src="/api/map-layers?lat={{ location_lat }}&lon={{ location_lon }}&radius={{ location_radius }}&mode=home"></iframe>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4">
-            <div class="card border-0 h-100">
-                <div class="card-header py-2"><h6 class="mb-0">📊 Quick Summary</h6></div>
-                <div class="card-body">
-                    <div class="mb-3" id="home-wind-lulc">
-                        <div class="factor-card mb-2">
-                            <span class="factor-icon">💨</span>
-                            <div class="flex-grow-1">
-                                <div class="factor-label">Wind Speed</div>
-                                <div class="factor-value" id="home-wind2">— m/s</div>
-                            </div>
-                        </div>
-                        <div class="factor-card mb-2">
-                            <span class="factor-icon">🗺️</span>
-                            <div class="flex-grow-1">
-                                <div class="factor-label">LULC Heat Score</div>
-                                <div class="factor-value" id="home-lulc">—</div>
-                            </div>
-                        </div>
-                        <div class="factor-card mb-2">
-                            <span class="factor-icon">🔮</span>
-                            <div class="flex-grow-1">
-                                <div class="factor-label">Future CHI (+1.5°C)</div>
-                                <div class="factor-value" style="color:var(--red);" id="home-future-chi">—</div>
-                            </div>
-                        </div>
-                    </div>
-                    <hr style="border-color:var(--border-card);">
-                    <div class="text-center">
-                        <small class="text-muted" id="home-data-source">Data source: loading...</small>
                     </div>
                 </div>
             </div>
@@ -759,13 +709,7 @@
                         <div class="form-check form-switch mb-2">
                             <input class="form-check-input" type="checkbox" id="settings-email-alerts" checked>
                             <label class="form-check-label text-light small" for="settings-email-alerts">
-                                <b>Email Notifications</b> (Twilio SendGrid) &mdash; <span class="text-muted">{{ user.email }}</span>
-                            </label>
-                        </div>
-                        <div class="form-check form-switch mb-3">
-                            <input class="form-check-input" type="checkbox" id="settings-sms-alerts" checked>
-                            <label class="form-check-label text-light small" for="settings-sms-alerts">
-                                <b>SMS Notifications</b> (Twilio SMS Gateway) &mdash; <span class="text-muted">{{ user.phone_number }}</span>
+                                <b>Email Notifications</b> &mdash; <span class="text-muted">{{ user.email }}</span>
                             </label>
                         </div>
 
@@ -777,19 +721,20 @@
 
             <!-- Test Notification Card -->
             <div class="card border-0 mb-4" style="background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.25) !important;">
-                <div class="card-header py-2" style="background:rgba(249,115,22,0.12);border-bottom:1px solid rgba(249,115,22,0.25);">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:rgba(249,115,22,0.12);border-bottom:1px solid rgba(249,115,22,0.25);">
                     <h6 class="mb-0 text-warning d-flex align-items-center gap-2">
                         <i class="fa-solid fa-paper-plane"></i>
-                        <span>Twilio Alert Verification &amp; Testing</span>
+                        <span>Alert Verification &amp; Testing</span>
                     </h6>
+                    <span class="badge bg-dark border border-warning text-warning" style="font-size:0.72rem;">Demo: sends to one verified recipient only.</span>
                 </div>
                 <div class="card-body">
                     <p class="small text-light mb-2">
-                        Test your connection to Twilio SMS and Twilio SendGrid. A test alert containing real-time HeatSense metrics (location, temperature, CHI, HHRI, and precautions) will be dispatched <b>exclusively to your registered phone and email</b>.
+                        Test your connection to the notification gateways. A test alert containing real-time HeatSense metrics will be dispatched <b>exclusively to your registered email and Telegram account</b>.
                     </p>
                     <div class="d-flex align-items-center gap-3 flex-wrap mb-3">
                         <div class="badge bg-dark border border-secondary text-light p-2">
-                            <i class="fa-solid fa-mobile-screen text-warning me-1"></i> Phone: <b>{{ user.phone_number or 'Not set' }}</b>
+                            <i class="fa-solid fa-mobile-screen text-warning me-1"></i> Telegram
                         </div>
                         <div class="badge bg-dark border border-secondary text-light p-2">
                             <i class="fa-solid fa-envelope text-warning me-1"></i> Email: <b>{{ user.email or 'Not set' }}</b>

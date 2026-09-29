@@ -220,6 +220,13 @@ def alerts():
     # Top high-risk districts for the System Alerts panel (Very High first, then High, then Moderate)
     top_risk_districts = [c for c in district_risk_cards if c['risk_level'] in ('Very High', 'High', 'Moderate')]
 
+    # Existing high-alert area identified by the project's risk ranking feature
+    high_alert_area = top_risk_districts[0]['name'] if top_risk_districts else (district_risk_cards[0]['name'] if district_risk_cards else 'Bidar')
+    default_sms_message = (
+        f"HeatSense High-Heat Alert: High heat conditions are reported in {high_alert_area}. "
+        f"Please stay hydrated, avoid strenuous outdoor activity during peak heat, and follow local advisories."
+    )
+
     return render_template(
         'alerts.html',
         alerts=alerts_list,
@@ -227,6 +234,8 @@ def alerts():
         top_risk_districts=top_risk_districts,
         tier_counts=tier_counts,
         risk_tiers=RISK_TIERS,
+        high_alert_area=high_alert_area,
+        default_sms_message=default_sms_message,
     )
 
 @main_bp.route('/logout')
@@ -1206,7 +1215,7 @@ def api_health_risk():
 @main_bp.route('/api/alerts/dispatch', methods=['POST'])
 def api_alerts_dispatch():
     """
-    Dispatch HeatSense alerts via Twilio SMS and Twilio SendGrid email.
+    Dispatch HeatSense alerts via SMS and Email.
     The recipient is STRICTLY the currently logged-in user, retrieved directly
     from the existing SQLite database using their active session ID.
     Does NOT send to other registered users, hardcoded numbers, or hardcoded emails.
@@ -1243,9 +1252,25 @@ def api_alerts_dispatch():
             email_enabled=email_enabled,
         )
     else:
-        location = body.get('location', 'Bengaluru Urban')
+        location = body.get('location')
+        if not location:
+            try:
+                db = get_db()
+                districts = db.execute('SELECT * FROM districts').fetchall()
+                from app.health_risk import get_district_hhri
+                best_d = None
+                max_hhri = -1
+                for d in districts:
+                    h = get_district_hhri(dict(d))
+                    if h.get('hhri', 0) > max_hhri:
+                        max_hhri = h.get('hhri', 0)
+                        best_d = d['name']
+                location = best_d or 'Bidar'
+            except Exception:
+                location = 'Bidar'
+
         risk_level = body.get('risk_level', 'High')
-        advisory = body.get('advisory', 'High heat stress detected. Take precautionary cooling measures.')
+        advisory = body.get('advisory', 'High heat conditions are reported. Please stay hydrated, avoid strenuous outdoor activity during peak heat, and follow local advisories.')
         hhri = body.get('hhri')
         chi = body.get('chi')
         temperature = body.get('temperature')
@@ -1268,6 +1293,7 @@ def api_alerts_dispatch():
 
     return jsonify({
         'success': True,
+        'notice': 'Demo: sends to one verified recipient only.',
         'recipient_user': recipient_name,
         'recipient_phone': recipient_phone,
         'recipient_email': recipient_email,
@@ -1299,7 +1325,23 @@ def api_alerts_test():
 
     # Use actual current HeatSense features or request params
     body = request.get_json() or {}
-    location_name = body.get('location') or 'Bengaluru Urban'
+    location_name = body.get('location')
+    if not location_name:
+        try:
+            db = get_db()
+            districts = db.execute('SELECT * FROM districts').fetchall()
+            from app.health_risk import get_district_hhri
+            best_d = None
+            max_hhri = -1
+            for d in districts:
+                h = get_district_hhri(dict(d))
+                if h.get('hhri', 0) > max_hhri:
+                    max_hhri = h.get('hhri', 0)
+                    best_d = d['name']
+            location_name = best_d or 'Bidar'
+        except Exception:
+            location_name = 'Bidar'
+
     lat = body.get('lat', 12.9716)
     lon = body.get('lon', 77.5946)
 
@@ -1335,6 +1377,7 @@ def api_alerts_test():
 
     return jsonify({
         'success': True,
+        'notice': 'Demo: sends to one verified recipient only.',
         'message': f"Test alert dispatched to registered account: {recipient_name}",
         'recipient_user': recipient_name,
         'recipient_phone': recipient_phone,
